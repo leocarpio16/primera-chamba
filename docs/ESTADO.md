@@ -1,6 +1,6 @@
 # Estado · Primera chamba
 
-**Bloque actual:** 1 cerrado. Siguiente: bloque 2 (embeddings de los 3 modelos).
+**Bloque actual:** 2 cerrado. Siguiente: bloque 3 (evaluación fuera de línea).
 
 ## Hecho
 - 2026-11-17 · Entrevista socrática y PRD v1.0 aprobado.
@@ -15,11 +15,14 @@
 - 2026-11-17 · **Bloque 1:** `primera_chamba/etl.py` (`python3 -m primera_chamba.etl`, ~25 s, pico de 3.5 GB de RSS)
   → `datos/procesado/vacantes.parquet` (206 MB, 110,928 × 21) + `etl_estadisticas.json`.
 
-## Pendiente del bloque 2
-- [ ] Decidir qué texto se embebe (título + primeras N palabras): MiniLM trunca a 128 tokens y e5 a 512, y la mediana
-  de la descripción es de 477 palabras.
-- [ ] TF-IDF, paraphrase-multilingual-MiniLM-L12-v2 y multilingual-e5-small sobre las 110,928 vacantes; guardar en
-  float16 y medir tiempo y memoria.
+- 2026-11-17 · **Bloque 2:** `primera_chamba/embeddings.py` (`python3 -m primera_chamba.embeddings [tfidf] [minilm] [e5]`)
+  → `datos/procesado/indice_{tfidf,tfidf_completo}.npz` + `vectorizador_*.pkl`, `indice_{minilm,e5}.npy` (float16),
+  `indice_job_ids.npy` (orden de filas = parquet, verificado) y `embeddings_meta.json` (tiempos y memoria).
+
+## Pendiente del bloque 3
+- [ ] Notebook de evaluación: perfiles sintéticos, etiquetas (con y sin título), nDCG@10 y Recall@10 con bootstrap,
+  líneas base aleatoria y popularidad, prueba entre idiomas con MarianMT.
+- [ ] Excluir del ranking la vacante de origen y su `grupo_plantilla`; no usar títulos genéricos como consulta.
 
 ## Decisiones
 - Claves en `.env` vía python-dotenv; en la nube, la variable de entorno tiene prioridad.
@@ -29,6 +32,25 @@
   de la demo; el resto queda para consultas en vivo. Adzuna solo si JSearch falla.
 
 ## Hallazgos verificados
+### Índices (bloque 2) — medido el 2026-11-17
+- **Texto que se representa:** título + primeras 70 palabras de la descripción, máx. 128 tokens, igual para MiniLM y
+  e5 (la comparación mide el modelo, no el largo). Ambos modelos usan el tokenizador de XLM-R: 1.56 tokens/palabra,
+  descripción mediana de 727 tokens. Con 70 palabras, el 97 % cabe en 128 tokens (con 80 se cortaría el 47 %).
+- Prueba con 2,000 vacantes en `mps` (fp32, lote 64): MiniLM 150 vac/s, e5 a 128 tokens 144 vac/s, e5 a 256 tokens
+  61 vac/s, e5 a 512 tokens 22 vac/s (≈84 min y 5.6 GB de `mps`) → descartado. fp16 solo sube a 160 vac/s (coseno
+  ≥ 0.9995 contra fp32); CPU 88 vac/s.
+- Catálogo completo: **e5 721 s (154 vac/s)**, pico de 1.33 GB en `mps`, RSS 0.33 GB. **MiniLM:** el tiempo guardado
+  (5,455 s) está inflado porque la Mac se suspendió al cerrar la tapa; la velocidad sin interrupciones es la de la prueba
+  (~150 vac/s ≈ 12 min). Pico de 1.41 GB en `mps`. Cada índice ocupa 85 MB (110,928 × 384, float16).
+- TF-IDF (unigramas + bigramas, `stop_words="english"`, min_df 3, max_df 0.5, 200 mil términos, sublineal):
+  recortado 26 s, 7.7 M no ceros, 40 MB, pico 0.9 GB; con la descripción completa 70 s, 45.9 M no ceros, 252 MB, pico 1.5 GB.
+- Verificación: sin NaN, normas = 1, ninguna fila repetida. Consultas en español ("enfermera en hospital",
+  "analista de datos, reportes y tableros") dan Registered Nurse / Data Analyst con los dos modelos densos.
+- **Cosenos de e5 comprimidos** (top-4 entre 0.86 y 0.89; MiniLM 0.58–0.79) → en el bloque 4, los bonos por
+  preferencias no pueden ser absolutos: estandarizar el coseno por consulta (o escalar los bonos) antes de sumarlos.
+- TF-IDF no se desploma del todo en español cuando la consulta comparte términos técnicos ("sql", "python") → la
+  prueba entre idiomas debe reportar también perfiles sin esos términos.
+
 ### ETL (bloque 1) — `datos/procesado/vacantes.parquet`
 - 123,849 → **110,928 vacantes**: 12,695 duplicados exactos (misma empresa + título + descripción, ~10 %) y 226 con
   descripción de menos de 20 palabras.
