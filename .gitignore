@@ -1,0 +1,16 @@
+# Secretos
+.env
+.streamlit/secrets.toml
+
+# Datos y cachés (se regeneran; el dataset de Kaggle no se redistribuye)
+datos/
+cache/
+
+# Python y Jupyter
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store

@@ -1,0 +1,10 @@
+pandas>=3.0
+pyarrow
+numpy
+scikit-learn
+sentence-transformers
+streamlit>=1.67
+python-dotenv
+fpdf2
+google-genai
+requests
