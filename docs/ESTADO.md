@@ -1,6 +1,6 @@
 # Estado · Primera chamba
 
-**Bloque actual:** 0 cerrado. Siguiente: bloque 1 (ETL).
+**Bloque actual:** 1 cerrado. Siguiente: bloque 2 (embeddings de los 3 modelos).
 
 ## Hecho
 - 2026-11-17 · Entrevista socrática y PRD v1.0 aprobado.
@@ -11,8 +11,15 @@
 - 2026-11-17 · Dataset descargado con kagglehub (159 MB comprimido, 15 s) en
   `~/.cache/kagglehub/datasets/arshkon/linkedin-job-postings/versions/13/`.
 
-## Pendiente del bloque 0
-- [x] Claves de Gemini, JSearch y Adzuna cargadas desde `.env` (verificado sin imprimirlas). Sondeo real hecho.
+- 2026-11-17 · Claves de Gemini, JSearch y Adzuna cargadas desde `.env` (verificado sin imprimirlas). Sondeo real hecho.
+- 2026-11-17 · **Bloque 1:** `primera_chamba/etl.py` (`python3 -m primera_chamba.etl`, ~25 s, pico de 3.5 GB de RSS)
+  → `datos/procesado/vacantes.parquet` (206 MB, 110,928 × 21) + `etl_estadisticas.json`.
+
+## Pendiente del bloque 2
+- [ ] Decidir qué texto se embebe (título + primeras N palabras): MiniLM trunca a 128 tokens y e5 a 512, y la mediana
+  de la descripción es de 477 palabras.
+- [ ] TF-IDF, paraphrase-multilingual-MiniLM-L12-v2 y multilingual-e5-small sobre las 110,928 vacantes; guardar en
+  float16 y medir tiempo y memoria.
 
 ## Decisiones
 - Claves en `.env` vía python-dotenv; en la nube, la variable de entorno tiene prioridad.
@@ -22,6 +29,28 @@
   de la demo; el resto queda para consultas en vivo. Adzuna solo si JSearch falla.
 
 ## Hallazgos verificados
+### ETL (bloque 1) — `datos/procesado/vacantes.parquet`
+- 123,849 → **110,928 vacantes**: 12,695 duplicados exactos (misma empresa + título + descripción, ~10 %) y 226 con
+  descripción de menos de 20 palabras.
+- Columnas: job_id, company_name, title, `titulo_norm`, description, location, `estado` (84.5 %), `remoto` (13,180),
+  `tipo_empleo`, `nivel` (75 %), `sueldo_anual` (30.5 %), pay_period, currency, `vistas`, `postulaciones`,
+  job_posting_url, listed_time, `skills` (lista de categorías, 98.5 % con al menos una), `industrias` (lista de nombres,
+  98.7 %), `palabras`, `grupo_plantilla`.
+- `normalized_salary` **sí está anualizado** (mediana por hora 53,560 ≈ 25.75 USD × 2,080 h; anual 100,810). Se
+  invalidaron 452 valores fuera de [10 mil, 1 M] USD o en otra moneda (había quincenales de 1.5 M y sueldos de 118).
+  Mediana válida: 82,500 USD.
+- **Plantillas copiadas:** 5,177 vacantes (4.7 %, 1,789 grupos, el mayor de 61) comparten la descripción exacta con otra,
+  con otro título (1,023 grupos) o empresa (283). `grupo_plantilla` las identifica → en la evaluación no cuentan como
+  acierto entre sí (sería una fuga).
+- `titulo_norm`: minúsculas, sin paréntesis ni sufijos tras " - ", "|" o ",", sin nivel (senior, sr, jr, II…) ni
+  jornada (full time, remote, per diem…). Se conserva "contract" (Contract Specialist es un puesto). 72,018 → 44,674
+  títulos; el 68.7 % de las vacantes comparte su título normalizado con otra. Limitación: no une sinónimos ("rn" 356
+  vs "registered nurse" 1,356), y hay títulos genéricos ("manager" 920, "director" 743) que en la etiqueta de "mismo
+  puesto" valen poco → filtrarlos al elegir las consultas del bloque 3.
+- Habilidades por vacante: 0 → 1,709; 1 → 49,046; 2 → 47,061; 3 → 13,112. Las más comunes: IT 23,498, MGMT 17,947,
+  SALE 17,619, MNFC 15,782, HCPR 15,427.
+- `vistas`: mediana 4, p90 25, p99 188 (1,387 nulas) → línea base de popularidad.
+
 ### Dataset (`postings.csv`, 493 MB)
 - **123,849 vacantes**, 31 columnas. `description` 100 % presente: mediana 477 palabras (p25 298, p75 696, máx 3,400).
   Los modelos truncan (MiniLM a 128 tokens por defecto, e5 a 512): hay que decidir qué parte del texto se embebe.
