@@ -16,6 +16,11 @@ DATOS = RAIZ / "datos"
 CACHE = RAIZ / "cache"
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+JSEARCH_API_KEY = os.getenv("JSEARCH_API_KEY", "").strip()
+ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID", "").strip()
+ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "").strip()
+
+DATASET_KAGGLE = "arshkon/linkedin-job-postings"
 
 
 def hay_gemini() -> bool:
