@@ -1,6 +1,6 @@
 # Estado · Primera chamba
 
-**Bloque actual:** 0 cerrado salvo la prueba de la API en vivo (espera claves del usuario). Siguiente: bloque 1 (ETL).
+**Bloque actual:** 0 cerrado. Siguiente: bloque 1 (ETL).
 
 ## Hecho
 - 2026-11-17 · Entrevista socrática y PRD v1.0 aprobado.
@@ -12,12 +12,14 @@
   `~/.cache/kagglehub/datasets/arshkon/linkedin-job-postings/versions/13/`.
 
 ## Pendiente del bloque 0
-- [ ] El usuario registra JSearch (RapidAPI) y/o Adzuna y pone las claves en `.env`; luego se hace una consulta real
-  con México para confirmar cobertura, límite y campos.
+- [x] Claves de Gemini, JSearch y Adzuna cargadas desde `.env` (verificado sin imprimirlas). Sondeo real hecho.
 
 ## Decisiones
 - Claves en `.env` vía python-dotenv; en la nube, la variable de entorno tiene prioridad.
-- API en vivo preferida: **JSearch** (descripción completa, agrega Google for Jobs); Adzuna de respaldo.
+- API en vivo: **JSearch como principal** (descripción completa; trae vacantes de LinkedIn, Indeed, Computrabajo… vía
+  Google for Jobs, sin scraping) y **Adzuna como respaldo** (descripción recortada, pero a veces trae sueldo).
+- Presupuesto de cuota: con 10 vacantes por llamada, unas 20–30 llamadas de JSearch se gastan en precargar la caché
+  de la demo; el resto queda para consultas en vivo. Adzuna solo si JSearch falla.
 
 ## Hallazgos verificados
 ### Dataset (`postings.csv`, 493 MB)
@@ -42,6 +44,19 @@
 - `jobs/job_industries.csv`: 422 industrias. Ojo: 126,807 job_id con habilidad y 127,125 con industria, más que las
   123,849 vacantes → en el bloque 1 se mide la cobertura real del cruce.
 - También: `jobs/salaries.csv`, `jobs/benefits.csv`, `companies/*`.
+
+### APIs en vivo — sondeo real con México (2026-11-17), respuestas en `cache/sondeo/`
+- **JSearch:** `/search` fue retirado (404 "Endpoint '/search' does not exist"); el actual es
+  `GET https://jsearch.p.rapidapi.com/search-v2` con encabezados `X-RapidAPI-Key` y `X-RapidAPI-Host`. Con
+  `query="analista de datos en Ciudad de México"` y `country="mx"` devolvió **10 vacantes** en `data.jobs`, más un
+  `data.cursor` para paginar. La descripción viene **completa** (70–639 palabras). Fuentes: LinkedIn 3, Indeed 3,
+  Computrabajo 2, SimplyHired 1, JobLeads 1. `job_city`/`job_country` a veces vienen nulos → usar `job_location`
+  ("Ciudad de México, CDMX • a través de LinkedIn"). Sin sueldo en esta muestra. `job_employment_type` en español
+  ("Tiempo completo"). Cuota según los encabezados: `X-RateLimit-Requests-Limit: 200`, Remaining 199, reinicio en
+  ~30 días. El 404 no consumió cuota.
+- **Adzuna:** `GET https://api.adzuna.com/v1/api/jobs/mx/search/1` funciona con México: 20 resultados de un total de
+  301 para "analista de datos". La descripción viene recortada (59–80 palabras); 13 de 20 traen `salary_min`.
+  Cuota según el usuario: 25 llamadas.
 
 ### APIs en vivo (lectura de documentación, 2026-11-17)
 - **Adzuna** (docs oficiales): requiere `app_id` + `app_key`; endpoint `/v1/api/jobs/{país}/search/{página}` con
