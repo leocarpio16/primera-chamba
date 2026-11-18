@@ -26,3 +26,7 @@ DATASET_KAGGLE = "arshkon/linkedin-job-postings"
 def hay_gemini() -> bool:
     """True si hay una clave de Gemini configurada (no comprueba que funcione)."""
     return bool(GEMINI_API_KEY)
+
+# Pesos por dólar: FIX de Banxico del 2026-11-17 (18.4677). Solo convierte el sueldo esperado (MXN mensual) para
+# compararlo con el catálogo (USD anual). La app permite ajustarlo.
+TIPO_CAMBIO_MXN_USD = 18.4677

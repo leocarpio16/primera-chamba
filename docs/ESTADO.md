@@ -1,6 +1,6 @@
 # Estado · Primera chamba
 
-**Bloque actual:** 3 cerrado. Siguiente: bloque 4 (app: formulario, ranking con desglose, Rocchio).
+**Bloque actual:** 4 cerrado. Siguiente: bloque 5 (API en vivo + caché).
 
 ## Hecho
 - 2026-11-17 · Entrevista socrática y PRD v1.0 aprobado.
@@ -24,11 +24,16 @@
   `datos/procesado/evaluacion_{tabla,idiomas,traduccion}.csv` y `evaluacion_por_consulta.parquet`. Se instaló
   `sentencepiece` 0.2.3 (MarianMT; sin dependencias, pandas sigue en 3.0.6). **Modelo elegido: e5 + traducción es → en.**
 
-## Pendiente del bloque 4
-- [ ] Motor de la app: traducir el perfil es → en con `ev.traducir(..., "es", "en")` (opus-mt-es-en, 312 MB, ya en
-  caché) y buscar con e5 (`query: `). Si la traducción falla, e5 directo en español.
-- [ ] Puntaje = coseno **estandarizado por consulta** + bonos (los cosenos de e5 van de 0.86 a 0.89 en el top).
-- [ ] Formulario, ranking con desglose del puntaje, Rocchio con 👍/👎.
+- 2026-11-17 · **Bloque 4:** `primera_chamba/motor.py` (perfil → consulta en inglés → e5 → puntaje con bonos →
+  Rocchio), `primera_chamba/traduccion.py` (MarianMT con caché en memoria) y `app.py` (`streamlit run app.py`).
+  Verificado con `streamlit.testing.v1.AppTest` (ejemplo → buscar → 👍 → 👎, sin excepciones) y con el servidor local.
+
+## Pendiente del bloque 5
+- [ ] JSearch `/search-v2` (principal) y Adzuna `mx` (respaldo) con caché en disco en `cache/`; si la API falla,
+  mostrar lo último en caché marcado como tal. Presupuesto: 199 llamadas de JSearch.
+- [ ] Puntuar las vacantes en vivo (en español) en el mismo ranking. Ojo: el perfil se traduce al inglés para el
+  catálogo; para vacantes en español conviene comparar con el perfil original (por decidir con datos).
+- [ ] La ubicación solo puede coincidir con vacantes en vivo (el catálogo es de EE. UU.).
 
 ## Decisiones
 - Claves en `.env` vía python-dotenv; en la nube, la variable de entorno tiene prioridad.
@@ -38,6 +43,17 @@
   de la demo; el resto queda para consultas en vivo. Adzuna solo si JSearch falla.
 
 ## Hallazgos verificados
+### App (bloque 4)
+- Puntaje: solo compiten las 300 vacantes más parecidas; puntaje = z + 0.5 × preferencias cumplidas (ubicación,
+  modalidad, sueldo, nivel). Con perfiles de prueba, z ≈ 6.4 en el 1.º lugar y ≈ 3.5 en el 300.º.
+- MarianMT traduce "nivel de entrada" como "input level" → solo se traduce el texto libre (puesto y habilidades); el
+  nivel se arma en inglés desde la lista fija.
+- El catálogo solo marca "remoto permitido" (no hay presencial ni híbrido) → esas preferencias salen como "sin dato".
+- Tipo de cambio: FIX de Banxico del 2026-11-17 = 18.4677 MXN/USD (tuit de Banxico reproducido por Milenio); editable.
+- Memoria: el motor ocupa ~1.0 GB (e5 + MarianMT es→en + índice float32 + catálogo sin descripciones). Las
+  descripciones se leen bajo demanda con un filtro de pyarrow (~0.3 s), porque cargarlas todas costaría 0.48 GB.
+- Tiempos: carga del motor ~8 s (una vez, con `st.cache_resource`), traducción ~3 s la primera vez, ranking 0.06 s.
+
 ### Evaluación (bloque 3) — `notebooks/evaluacion.ipynb`
 - 1,000 consultas (684 puestos, máx. 3 por título, sin títulos genéricos, ≥5 relevantes fuera de su grupo). Perfil:
   `titulo_norm. Skills: <categorías>. Experience level: <nivel>.` Relevantes por consulta (mediana): 29 del mismo

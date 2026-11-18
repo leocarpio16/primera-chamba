@@ -15,6 +15,7 @@ from scipy import sparse
 
 from primera_chamba import config
 from primera_chamba import embeddings as em
+from primera_chamba.traduccion import traducir  # noqa: F401 (lo usa el notebook como ev.traducir)
 
 K = 10
 # Títulos de una palabra que no definen un puesto ("manager" de qué). No se usan como consulta.
@@ -195,18 +196,3 @@ def tops_popularidad(consultas: pd.DataFrame, grupo: np.ndarray, vistas: np.ndar
     """Las vacantes más vistas del catálogo, iguales para todos (salvo las excluidas)."""
     return np.array([_top(vistas, grupo == g) for g in consultas["grupo_plantilla"]])
 
-
-def traducir(textos: list[str], origen: str = "en", destino: str = "es", lote: int = 32) -> list[str]:
-    """Traducción local y gratuita con MarianMT (`Helsinki-NLP/opus-mt-{origen}-{destino}`)."""
-    import torch
-    from transformers import MarianMTModel, MarianTokenizer
-
-    nombre = f"Helsinki-NLP/opus-mt-{origen}-{destino}"
-    disp = "mps" if torch.backends.mps.is_available() else "cpu"
-    tok, modelo = MarianTokenizer.from_pretrained(nombre), MarianMTModel.from_pretrained(nombre).to(disp).eval()
-    salida = []
-    with torch.no_grad():
-        for i in range(0, len(textos), lote):
-            x = tok(textos[i:i + lote], return_tensors="pt", padding=True, truncation=True).to(disp)
-            salida += tok.batch_decode(modelo.generate(**x, max_new_tokens=128), skip_special_tokens=True)
-    return salida
