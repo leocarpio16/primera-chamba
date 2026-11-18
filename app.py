@@ -251,13 +251,12 @@ if ss.editando or "q0" not in ss:
             st.text_area("Habilidades, separadas por comas", key="w_habilidades", height=96,
                          placeholder="SQL, Python, Excel, atención a clientes…")
         elif paso == 2:
-            c1, c2 = st.columns(2)
-            c1.text_input("Ubicación", key="w_ubicacion", placeholder="Ej. Austin, Texas",
+            st.text_input("Ubicación", key="w_ubicacion", placeholder="Ej. Austin, Texas",
                           icon=":material/location_on:")
-            c2.selectbox("Modalidad", MODALIDADES, key="w_modalidad", icon=":material/home_work:")
             st.html('<p class="pc-nota">Escribe la ciudad, el estado o ambos, separados por coma. El estado puede ir '
                     'completo o abreviado: <b>Texas</b> o <b>TX</b>, <b>Nueva York</b> o <b>NY</b>. '
                     'Por ahora el catálogo es de vacantes en EE. UU.</p>')
+            st.selectbox("Modalidad", MODALIDADES, key="w_modalidad", icon=":material/home_work:")
             st.number_input("Sueldo mensual esperado (MXN)", min_value=0, step=1000, key="w_sueldo",
                             icon=":material/payments:", help="0 = sin preferencia")
             st.multiselect("Tipo de empleo", list(TIPOS), key="w_tipos", placeholder="Todos")
