@@ -1,6 +1,6 @@
 # Estado · Primera chamba
 
-**Bloque actual:** 2 cerrado. Siguiente: bloque 3 (evaluación fuera de línea).
+**Bloque actual:** 3 cerrado. Siguiente: bloque 4 (app: formulario, ranking con desglose, Rocchio).
 
 ## Hecho
 - 2026-11-17 · Entrevista socrática y PRD v1.0 aprobado.
@@ -19,10 +19,16 @@
   → `datos/procesado/indice_{tfidf,tfidf_completo}.npz` + `vectorizador_*.pkl`, `indice_{minilm,e5}.npy` (float16),
   `indice_job_ids.npy` (orden de filas = parquet, verificado) y `embeddings_meta.json` (tiempos y memoria).
 
-## Pendiente del bloque 3
-- [ ] Notebook de evaluación: perfiles sintéticos, etiquetas (con y sin título), nDCG@10 y Recall@10 con bootstrap,
-  líneas base aleatoria y popularidad, prueba entre idiomas con MarianMT.
-- [ ] Excluir del ranking la vacante de origen y su `grupo_plantilla`; no usar títulos genéricos como consulta.
+- 2026-11-17 · La suspensión de la Mac no dañó los índices: 600 filas recalculadas coinciden (coseno ≥ 0.99995).
+- 2026-11-17 · **Bloque 3:** `primera_chamba/evaluacion.py` + `notebooks/evaluacion.ipynb` ejecutado (~2 min) →
+  `datos/procesado/evaluacion_{tabla,idiomas,traduccion}.csv` y `evaluacion_por_consulta.parquet`. Se instaló
+  `sentencepiece` 0.2.3 (MarianMT; sin dependencias, pandas sigue en 3.0.6). **Modelo elegido: e5 + traducción es → en.**
+
+## Pendiente del bloque 4
+- [ ] Motor de la app: traducir el perfil es → en con `ev.traducir(..., "es", "en")` (opus-mt-es-en, 312 MB, ya en
+  caché) y buscar con e5 (`query: `). Si la traducción falla, e5 directo en español.
+- [ ] Puntaje = coseno **estandarizado por consulta** + bonos (los cosenos de e5 van de 0.86 a 0.89 en el top).
+- [ ] Formulario, ranking con desglose del puntaje, Rocchio con 👍/👎.
 
 ## Decisiones
 - Claves en `.env` vía python-dotenv; en la nube, la variable de entorno tiene prioridad.
@@ -32,6 +38,24 @@
   de la demo; el resto queda para consultas en vivo. Adzuna solo si JSearch falla.
 
 ## Hallazgos verificados
+### Evaluación (bloque 3) — `notebooks/evaluacion.ipynb`
+- 1,000 consultas (684 puestos, máx. 3 por título, sin títulos genéricos, ≥5 relevantes fuera de su grupo). Perfil:
+  `titulo_norm. Skills: <categorías>. Experience level: <nivel>.` Relevantes por consulta (mediana): 29 del mismo
+  puesto, 814 estructurales.
+- nDCG@10 con título [IC 95 %]: TF-IDF 70 palabras 0.442 [0.423, 0.460] · TF-IDF completo 0.407 · MiniLM 0.365 ·
+  e5 0.361 · aleatorio 0.008 · popularidad 0.002.
+- nDCG@10 solo estructural: e5 0.210 [0.193, 0.228] · MiniLM 0.199 · TF-IDF 0.196 · TF-IDF completo 0.169 · aleatorio
+  0.022 · popularidad 0.004. e5 − TF-IDF = +0.014 [+0.000, +0.028] (casi empate).
+- La ventaja de TF-IDF con título es en parte circular (el perfil trae el puesto). La etiqueta no une sinónimos ("system
+  engineer" ≠ "systems engineer"), lo que castiga a los modelos densos.
+- Título + 70 palabras > descripción completa en TF-IDF (+0.034, P = 1.00).
+- **Español (200 perfiles traducidos con opus-mt-en-es):** TF-IDF cae 96 % (0.016), MiniLM 75 % (0.094), e5 55 % (0.165).
+- **Traducir es → en antes de buscar** (ida y vuelta, optimista; agregado tras ver resultados): e5 0.323, MiniLM 0.315,
+  TF-IDF 0.299. e5 (es→en) − e5 directo = +0.158 [+0.126, +0.192].
+- Regla de decisión fijada antes de los resultados: mayor nDCG@10 con perfiles en español → **e5** (gana directo y con
+  traducción).
+- Traducción con MarianMT en `mps`: 200 perfiles en ~20 s (en → es).
+
 ### Índices (bloque 2) — medido el 2026-11-17
 - **Texto que se representa:** título + primeras 70 palabras de la descripción, máx. 128 tokens, igual para MiniLM y
   e5 (la comparación mide el modelo, no el largo). Ambos modelos usan el tokenizador de XLM-R: 1.56 tokens/palabra,
