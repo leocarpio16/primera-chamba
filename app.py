@@ -227,6 +227,14 @@ with st.sidebar:
     st.caption("**Catálogo:** 110,928 vacantes reales de LinkedIn (EE. UU., 2023–2024).  \n"
                "**Modelo:** multilingual-e5-small con tu perfil traducido al inglés. Se eligió en una evaluación "
                "fuera de línea con 1,000 perfiles contra TF-IDF, MiniLM, azar y popularidad.")
+    with st.expander("Detalle técnico"):
+        st.caption(f"Puntaje = similitud coseno estandarizada contra el catálogo (z) + {BONO} por preferencia "
+                   f"cumplida, entre las {CANDIDATOS} vacantes más parecidas. Coincidencia: Muy alta = top 50 por "
+                   "similitud, Alta = top 500, Media = top 5,000. Retroalimentación con Rocchio (α = 1, β = 0.75, "
+                   "γ = 0.15).")
+        if "consulta" in ss:
+            st.caption(f"Tu perfil se busca como: «{ss.consulta}»"
+                       f"{'' if ss.traducido else ' (sin traducir: el traductor no respondió)'}.")
 
 # ---------------- encabezado ----------------
 st.html(ESTILOS)
@@ -294,6 +302,35 @@ def ordinal(n: int) -> str:
     return f"{n:,}.ª"
 
 
+PARECIDO = {"Muy alta": "Se parece mucho a lo que buscas", "Alta": "Se parece bastante a lo que buscas",
+            "Media": "Se parece en parte a lo que buscas", "Baja": "Se parece poco a lo que buscas"}
+
+
+def lista(nombres: list[str], conj: str = "y") -> str:
+    nombres = [f"tu {n.lower()}" for n in nombres]
+    return nombres[0] if len(nombres) == 1 else ", ".join(nombres[:-1]) + f" {conj} " + nombres[-1]
+
+
+def resumen(desglose, etiqueta: str, lugar: int) -> str:
+    """Interpretación en dos frases: qué tanto se parece y qué cumple de lo que pediste."""
+    cumple = [p for e, p, _ in desglose if e == "✓"]
+    no_cumple = [p for e, p, _ in desglose if e == "✗"]
+    pidio = [p for e, p, t in desglose if not t.startswith("No indicaste")]
+    lugar_txt = "es la más parecida" if lugar == 1 else f"es la {ordinal(lugar)} más parecida"
+    frases = [f"{PARECIDO[etiqueta]}: {lugar_txt} de las 110,928 vacantes."]
+    if cumple and no_cumple:
+        frases.append(f"Cumple con {lista(cumple)}, pero no con {lista(no_cumple, 'ni')}.")
+    elif cumple:
+        frases.append(f"Cumple con {lista(cumple)}.")
+    elif no_cumple:
+        frases.append(f"No cumple con {lista(no_cumple, 'ni')}.")
+    elif pidio:
+        frases.append("El anuncio no da datos para comparar tus preferencias.")
+    if etiqueta == "Baja" and cumple:
+        frases.append("Aparece en tu lista porque cumple con lo que pediste.")
+    return f"**En resumen:** {' '.join(frases)}"
+
+
 if "q0" in ss and not ss.editando:
     m, perfil = motor(), ss.mi_perfil
     calificadas = len(ss.gustan) + len(ss.no_gustan)
@@ -325,10 +362,6 @@ if "q0" in ss and not ss.editando:
             "perfil, ganan lugares las que cumplen lo que pediste: ubicación, modalidad, sueldo y experiencia.\n"
             "4. **Aprendemos de ti.** Cuando marcas *Me interesa*, buscamos más vacantes parecidas a esa; cuando "
             "marcas *No me interesa*, la quitamos y nos alejamos de las que se le parecen.")
-        st.caption(f"Detalle técnico: modelo multilingual-e5-small; tu perfil se busca como «{ss.consulta}»"
-                   f"{'' if ss.traducido else ' (sin traducir: el traductor no respondió)'}. Puntaje = similitud "
-                   f"coseno estandarizada (z) + {BONO} por preferencia cumplida; retroalimentación con Rocchio "
-                   f"(α = 1, β = 0.75, γ = 0.15).")
     if calificadas:
         st.info(f"Ajustamos la lista con lo que marcaste: {len(ss.gustan)} te interesan y {len(ss.no_gustan)} no. "
                 "Las flechas indican cuántos lugares subió o bajó cada vacante.", icon=":material/tune:")
@@ -362,20 +395,15 @@ if "q0" in ss and not ss.editando:
                 st.html(f'<div class="pc-coinc"><div class="l">Coincidencia</div><div class="n">{etiqueta}</div>'
                         f'<div class="b">{barras}</div></div>')
             with st.expander("¿Por qué te la recomendamos?"):
-                lugar = int(f["lugar_similitud"])
-                parecido = ("Es la vacante que **más se parece a tu perfil** de las 110,928." if lugar == 1 else
-                            f"De las 110,928 vacantes, es la **{ordinal(lugar)} que más se parece a tu perfil**.")
-                lineas = [f"**Coincidencia {etiqueta.lower()}.** {parecido}", "", "**Lo que pediste:**"]
-                for e, pref, texto in f["desglose"]:
-                    lineas.append(f"- :{COLOR[e]}[{ICONO[e]}] **{pref}:** {texto}")
-                st.markdown("\n".join(lineas))
+                st.markdown(resumen(f["desglose"], etiqueta, int(f["lugar_similitud"])))
+                st.markdown("**Lo que pediste:**\n" + "\n".join(
+                    f"- :{COLOR[e]}[{ICONO[e]}] **{pref}:** {texto}" for e, pref, texto in f["desglose"]))
                 palabras = desc.get(jid, "").split()
                 if palabras:
                     st.markdown("**Del anuncio:**")
                     st.caption(" ".join(palabras[:90]) + (" …" if len(palabras) > 90 else ""))
                 fecha = datetime.fromtimestamp(f["listed_time"] / 1000).strftime("%d/%m/%Y")
-                st.caption(f"Publicada el {fecha}. Detalle técnico: z = {f['z']:.2f}, coseno = {f['coseno']:.3f}, "
-                           f"preferencias cumplidas = {f['cumplidas']}, puntaje = {f['puntaje']:.2f}.")
+                st.caption(f"Publicada el {fecha}.")
             with st.container(horizontal=True, vertical_alignment="center", key=f"acc_{jid}"):
                 st.link_button("Ver anuncio", f["job_posting_url"], type="tertiary", icon=":material/open_in_new:",
                                icon_position="right")
