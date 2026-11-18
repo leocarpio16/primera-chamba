@@ -8,9 +8,9 @@ from html import escape
 
 import streamlit as st
 
-from primera_chamba import config
-from primera_chamba.motor import (BONO, CANDIDATOS, MODALIDADES, NIVEL_ES, NIVELES, TIPO_ES, TIPOS, Motor, Perfil,
-                                  coincidencia, consulta_en, descripciones)
+from primera_chamba import config, en_vivo
+from primera_chamba.motor import (BONO, CANDIDATOS, LUGAR_MAX_VIVAS, MODALIDADES, NIVEL_ES, NIVELES, TIPO_ES, TIPOS,
+                                  Motor, Perfil, coincidencia, consulta_en, descripciones)
 
 st.set_page_config(page_title="Primera chamba", page_icon=":material/work:", layout="centered", initial_sidebar_state="collapsed")
 ss = st.session_state
@@ -86,6 +86,8 @@ ESTILOS = """
 .pc-vac-meta { color: var(--tinta-2); font-size: .86rem; margin: .15rem 0 .5rem; }
 .pc-mov { font-family: "JetBrains Mono", monospace; font-size: .75rem; padding: .1rem .4rem; border-radius: 6px;
           margin-left: .4rem; vertical-align: middle; background: #f0f0ee; color: var(--tinta-2); }
+.pc-vivo { font-family: "JetBrains Mono", monospace; font-size: .72rem; padding: .12rem .45rem; border-radius: 6px;
+           margin-left: .4rem; vertical-align: middle; background: var(--negro-1); color: var(--negro-tinta); }
 .pc-coinc { text-align: right; }
 .pc-coinc .l { font-size: .68rem; color: var(--tinta-3); text-transform: uppercase; letter-spacing: .08em; }
 .pc-coinc .n { font-family: "JetBrains Mono", monospace; font-weight: 600; font-size: 1.15rem; color: var(--tinta);
@@ -114,7 +116,7 @@ EJEMPLO = {
     "puesto": "Analista de datos",
     "nivel": "Sin experiencia / recién egresado",
     "habilidades": "SQL, Python, Excel, Power BI, estadística, visualización de datos",
-    "ubicacion": "",
+    "ubicacion": "Ciudad de México",
     "modalidad": "Remoto",
     "sueldo": 25000,
     "tipos": ["Tiempo completo"],
@@ -145,7 +147,7 @@ def textos(ids: tuple[int, ...]) -> dict[int, str]:
 
 # ---------------- estado ----------------
 for k, v in {"gustan": [], "no_gustan": [], "lugares_previos": {}, "ultimo_descarte": None, "paso": 1, "datos": dict(VACIO),
-             "editando": True}.items():
+             "editando": True, "vivo_res": None, "vivas": None, "vec_vivas": {}}.items():
     ss.setdefault(k, v)
 
 
@@ -220,6 +222,35 @@ def buscar():
     ss.mi_perfil, ss.consulta, ss.traducido = perfil, consulta, traducido
     reiniciar_calificaciones()
     ss.lugares_actuales, ss.editando = {}, False
+    ss.vivo_res, ss.vivas, ss.vec_vivas = None, None, {}
+    if ss.get("incluir_vivo", True):
+        cargar_vivas()
+
+
+def cargar_vivas(forzar: bool = False):
+    """Vacantes en vivo de México para el perfil buscado (caché → JSearch → Adzuna → lo último guardado)."""
+    if "mi_perfil" not in ss:
+        return
+    p = ss.mi_perfil
+    ss.vivo_res = en_vivo.buscar(p.puesto, p.ubicacion, sin_red=ss.get("simular_caida", False), forzar=forzar)
+    ss.vivas, ss.vec_vivas = motor().preparar_vivas(ss.vivo_res.vacantes)
+
+
+def ficha(idx) -> tuple[str, str, str]:
+    """(título, empresa, ubicación) de una vacante del catálogo (int) o en vivo (str)."""
+    if isinstance(idx, str):
+        v = ss.vivas[ss.vivas["idx"] == idx] if ss.vivas is not None and len(ss.vivas) else []
+        if not len(v):
+            return "Vacante en vivo", "", "México"
+        v = v.iloc[0]
+    else:
+        v = motor().cat.iloc[idx]
+    empresa = v["company_name"] if isinstance(v["company_name"], str) else "Empresa no indicada"
+    return v["title"], empresa, v["location"]
+
+
+def jid_de(idx):
+    return idx if isinstance(idx, str) else int(motor().cat["job_id"].iloc[idx])
 
 
 # `?demo=1` abre la app con el perfil de ejemplo ya buscado (respaldo para la presentación).
@@ -235,10 +266,13 @@ with st.sidebar:
                                   format="%.4f", help="FIX de Banxico del 17/11/2026. Solo se usa para comparar tu "
                                                       "sueldo esperado con los sueldos del catálogo (USD al año).")
     n_mostrar = st.slider("Vacantes a mostrar", 5, 50, 15, step=5)
+    st.toggle("Buscar también vacantes en vivo de México", value=True, key="incluir_vivo")
     if ss.gustan or ss.no_gustan:
         st.button("Borrar mis calificaciones", on_click=reiniciar_calificaciones)
     st.divider()
     st.caption("**Catálogo:** 110,928 vacantes reales de LinkedIn (EE. UU., 2023–2024).  \n"
+               "**En vivo:** vacantes de México de LinkedIn, Indeed, Computrabajo y otras bolsas (JSearch; Adzuna "
+               f"si falla). Se guardan {en_vivo.VIGENCIA_H} h para no gastar consultas.  \n"
                "**Modelo:** multilingual-e5-small con tu perfil traducido al inglés. Se eligió en una evaluación "
                "fuera de línea con 1,000 perfiles contra TF-IDF, MiniLM, azar y popularidad.")
     with st.expander("Detalle técnico"):
@@ -249,6 +283,19 @@ with st.sidebar:
         if "consulta" in ss:
             st.caption(f"Tu perfil se busca como: «{ss.consulta}»"
                        f"{'' if ss.traducido else ' (sin traducir: el traductor no respondió)'}.")
+        st.caption("**En vivo:** cada vacante se compara con la misma consulta y se estandariza con el catálogo, así "
+                   f"queda en la misma escala; entran las que estarían en el top {LUGAR_MAX_VIVAS:,} por similitud.")
+        c = en_vivo.cuota()
+        st.caption(f"Consultas a las APIs registradas: {c['total']}. JSearch: "
+                   f"{'quedan ' + str(c['JSearch']) + ' de 200 este mes' if c['JSearch'] is not None else 'sin dato de cuota aún'}"
+                   f"; Adzuna: {c['Adzuna']} este mes.")
+        st.checkbox("Simular que la API no responde", key="simular_caida", on_change=cargar_vivas,
+                    help="Prueba del respaldo: se muestran las vacantes en vivo guardadas la última vez.")
+        if "mi_perfil" in ss and ss.get("incluir_vivo", True):
+            st.button("Volver a consultar la API (gasta 1 consulta)", icon=":material/refresh:",
+                      on_click=cargar_vivas, kwargs={"forzar": True})
+        if ss.vivo_res is not None and ss.vivo_res.errores:
+            st.caption("Último error: " + "; ".join(ss.vivo_res.errores))
 
 # ---------------- encabezado ----------------
 st.html(ESTILOS)
@@ -273,11 +320,11 @@ if ss.editando or "q0" not in ss:
             st.text_area("Habilidades, separadas por comas", key="w_habilidades", height=96,
                          placeholder="SQL, Python, Excel, atención a clientes…")
         elif paso == 2:
-            st.text_input("Ubicación", key="w_ubicacion", placeholder="Ej. Austin, Texas",
+            st.text_input("Ubicación", key="w_ubicacion", placeholder="Ej. Ciudad de México o Austin, Texas",
                           icon=":material/location_on:")
-            st.html('<p class="pc-nota">Escribe la ciudad, el estado o ambos, separados por coma. El estado puede ir '
-                    'completo o abreviado: <b>Texas</b> o <b>TX</b>, <b>Nueva York</b> o <b>NY</b>. '
-                    'Por ahora el catálogo es de vacantes en EE. UU.</p>')
+            st.html('<p class="pc-nota">Escribe la ciudad, el estado o ambos, separados por coma. Buscamos en vivo '
+                    'vacantes de México (<b>Ciudad de México</b>, <b>CDMX</b>, <b>Monterrey</b>…) y en un catálogo '
+                    'de EE. UU., donde el estado puede ir completo o abreviado: <b>Texas</b> o <b>TX</b>.</p>')
             st.selectbox("Modalidad", MODALIDADES, key="w_modalidad", icon=":material/home_work:")
             st.number_input("Sueldo mensual esperado (MXN)", min_value=0, step=1000, key="w_sueldo",
                             icon=":material/payments:", help="0 = sin preferencia")
@@ -325,7 +372,7 @@ def lista(nombres: list[str], conj: str = "y") -> str:
     return nombres[0] if len(nombres) == 1 else ", ".join(nombres[:-1]) + f" {conj} " + nombres[-1]
 
 
-def resumen(desglose, etiqueta: str, lugar: int, en_lista: bool = True) -> str:
+def resumen(desglose, etiqueta: str, lugar: int, en_lista: bool = True, viva: bool = False) -> str:
     """Interpretación en dos frases: qué tanto se parece y qué cumple de lo que pediste."""
     cumple = [p for e, p, _ in desglose if e == "✓"]
     no_cumple = [p for e, p, _ in desglose if e == "✗"]
@@ -333,6 +380,9 @@ def resumen(desglose, etiqueta: str, lugar: int, en_lista: bool = True) -> str:
     lugar_txt = ("es la más parecida" if lugar == 1 else "es la menos parecida" if lugar >= 110928
                  else f"es la {ordinal(lugar)} más parecida")
     frases = [f"{PARECIDO[etiqueta]}: {lugar_txt} de las 110,928 vacantes."]
+    if viva:  # no es parte del catálogo: se dice a qué altura del catálogo quedaría
+        frases = [f"{PARECIDO[etiqueta]}: quedaría como la {ordinal(lugar)} más parecida entre las 110,928 vacantes "
+                  "del catálogo."]
     if cumple and no_cumple:
         frases.append(f"Cumple con {lista(cumple)}, pero no con {lista(no_cumple, 'ni')}.")
     elif cumple:
@@ -348,10 +398,12 @@ def resumen(desglose, etiqueta: str, lugar: int, en_lista: bool = True) -> str:
 
 if "q0" in ss and not ss.editando:
     m, perfil = motor(), ss.mi_perfil
+    if ss.incluir_vivo and ss.vivo_res is None:  # se activó después de buscar
+        with st.spinner("Buscando vacantes en vivo de México…"):
+            cargar_vivas()
+    vivas = ss.vivas if ss.incluir_vivo else None
     calificadas = len(ss.gustan) + len(ss.no_gustan)
-    q = m.rocchio(ss.q0, ss.gustan, ss.no_gustan) if calificadas else ss.q0
-    r = m.rankear(q, perfil, excluir=ss.no_gustan, n=n_mostrar, tipo_cambio=tipo_cambio)
-    desc = textos(tuple(int(j) for j in r["job_id"]))
+    q = m.rocchio(ss.q0, ss.gustan, ss.no_gustan, ss.vec_vivas) if calificadas else ss.q0
 
     with st.container(key="resumen"):
         c1, c2 = st.columns([4, 1], vertical_alignment="center")
@@ -366,23 +418,52 @@ if "q0" in ss and not ss.editando:
         c2.button("Editar", icon=":material/edit:", on_click=editar_perfil, width="stretch")
 
     st.html('<p class="pc-seccion">Vacantes recomendadas</p>')
+    ORIGENES = {"Todas": "todas", "México, en vivo": "vivo", "Catálogo de EE. UU.": "catalogo"}
+    cuando = ""
+    if ss.incluir_vivo:
+        eleccion = st.segmented_control("Mostrar", list(ORIGENES), default="Todas", key="origen",
+                                        label_visibility="collapsed")
+        origen = ORIGENES.get(eleccion or "Todas")
+        res = ss.vivo_res
+        cuando = datetime.fromisoformat(res.consultada).strftime("el %d/%m/%Y a las %H:%M") if res.consultada else ""
+        n_vivas = len(m.rankear(q, perfil, excluir=ss.no_gustan, n=10_000, tipo_cambio=tipo_cambio, vivas=vivas,
+                                vectores_vivas=ss.vec_vivas, origen="vivo")) if vivas is not None and len(vivas) else 0
+        if res.vencida:
+            st.info(f"No pudimos consultar las vacantes en vivo en este momento. Te mostramos las que guardamos "
+                    f"{cuando}.", icon=":material/cloud_off:")
+        elif not res.vacantes:
+            st.info("No pudimos consultar vacantes en vivo de México y no tenemos guardadas para esta búsqueda. "
+                    "Te mostramos solo el catálogo.", icon=":material/cloud_off:")
+        else:
+            st.caption(f"En vivo: {n_vivas} de {len(res.vacantes)} vacantes de México se parecen lo suficiente a tu "
+                       f"perfil y entran a la lista (consultadas {cuando}).")
+    else:
+        origen = "catalogo"
+    r = m.rankear(q, perfil, excluir=ss.no_gustan, n=n_mostrar, tipo_cambio=tipo_cambio, vivas=vivas,
+                  vectores_vivas=ss.vec_vivas, origen=origen)
+    es_cat = r["origen"].eq("catalogo") if len(r) else []
+    desc = textos(tuple(int(j) for j in r.loc[es_cat, "job_id"])) if len(r) else {}
+    if not len(r):
+        st.info("Ninguna vacante en vivo se parece lo suficiente a tu perfil. Prueba con «Todas».",
+                icon=":material/search_off:")
     if calificadas:
         st.info(f"Ajustamos la lista con lo que marcaste: {len(ss.gustan)} te interesan y {len(ss.no_gustan)} no. "
                 "Las flechas indican cuántos lugares subió o bajó cada vacante.", icon=":material/tune:")
 
-    def aviso_deshacer(idx: int):
-        v = m.cat.iloc[idx]
+    def aviso_deshacer(idx):
         with st.container(horizontal=True, vertical_alignment="center", key="deshacer"):
-            st.html(f'<p class="pc-deshacer">Quitaste <b>{escape(v["title"])}</b> de tu lista.</p>')
+            st.html(f'<p class="pc-deshacer">Quitaste <b>{escape(ficha(idx)[0])}</b> de tu lista.</p>')
             st.space("stretch")
             st.button("Deshacer", icon=":material/undo:", on_click=recuperar, args=(idx,), key="btn_deshacer")
 
     previos = ss.lugares_previos
     descarte = ss.ultimo_descarte
-    lugar_descarte = previos.get(int(m.cat["job_id"].iloc[descarte])) if descarte is not None else None
-    ss.lugares_actuales = {int(j): i for i, j in enumerate(r["job_id"])}
+    lugar_descarte = previos.get(jid_de(descarte)) if descarte is not None else None
+    ss.lugares_actuales = {jid_de(j): i for i, j in enumerate(r["idx"])} if len(r) else {}
     for i, f in r.iterrows():
-        jid, idx = int(f["job_id"]), int(f["idx"])
+        viva = f["origen"] == "vivo"
+        idx = f["idx"] if viva else int(f["idx"])
+        jid = jid_de(idx)
         if lugar_descarte is not None and i == lugar_descarte:
             aviso_deshacer(descarte)
         mov = ""
@@ -396,11 +477,15 @@ if "q0" in ss and not ss.editando:
                     f["location"], TIPO_ES.get(f["tipo_empleo"], f["tipo_empleo"])]
         if f["nivel"] in NIVEL_ES:
             detalles.append(NIVEL_ES[f["nivel"]])
+        if viva and f["publicador"]:
+            detalles.append(f"vía {f['publicador']}")
+        detalles = [d for d in detalles if isinstance(d, str) and d]
         with st.container(key=f"vac_{jid}"):
             c1, c2 = st.columns([5, 1.3])
             with c1:
                 st.html(f'<span class="pc-pos">#{i + 1}</span>'
                         f'{f"<span class=pc-mov>{mov}</span>" if mov else ""}'
+                        f'{"<span class=pc-vivo>En vivo · México</span>" if viva else ""}'
                         f'{"<span class=pc-mov>Te interesa</span>" if interesa else ""}'
                         f'<p class="pc-vac-titulo">{escape(f["title"])}</p>'
                         f'<p class="pc-vac-meta">{escape(" · ".join(str(d) for d in detalles))}</p>')
@@ -410,18 +495,23 @@ if "q0" in ss and not ss.editando:
                 st.html(f'<div class="pc-coinc"><div class="l">Coincidencia</div><div class="n">{etiqueta}</div>'
                         f'<div class="b">{barras}</div></div>')
             with st.expander("¿Por qué te la recomendamos?"):
-                st.markdown(resumen(f["desglose"], etiqueta, int(f["lugar_similitud"])))
+                st.markdown(resumen(f["desglose"], etiqueta, int(f["lugar_similitud"]), viva=viva))
                 st.markdown("**Lo que pediste:**\n" + "\n".join(
                     f"- :{COLOR[e]}[{ICONO[e]}] **{pref}:** {texto}" for e, pref, texto in f["desglose"]))
-                palabras = desc.get(jid, "").split()
+                palabras = (f["descripcion"] if viva else desc.get(jid, "")).split()
                 if palabras:
                     st.markdown("**Del anuncio:**")
                     st.caption(" ".join(palabras[:90]) + (" …" if len(palabras) > 90 else ""))
-                fecha = datetime.fromtimestamp(f["listed_time"] / 1000).strftime("%d/%m/%Y")
-                st.caption(f"Publicada el {fecha}.")
+                if viva:
+                    st.caption(f"Publicada {f['publicada'] or 'sin fecha'} · consultada {cuando}." if f["publicada"]
+                               else f"Consultada {cuando}.")
+                else:
+                    fecha = datetime.fromtimestamp(f["listed_time"] / 1000).strftime("%d/%m/%Y")
+                    st.caption(f"Publicada el {fecha}.")
             with st.container(horizontal=True, vertical_alignment="center", key=f"acc_{jid}"):
-                st.link_button("Ver anuncio", f["job_posting_url"], type="tertiary", icon=":material/open_in_new:",
-                               icon_position="right")
+                if isinstance(f["job_posting_url"], str) and f["job_posting_url"]:
+                    st.link_button("Ver anuncio", f["job_posting_url"], type="tertiary",
+                                   icon=":material/open_in_new:", icon_position="right")
                 st.space("stretch")
                 st.button("Te interesa" if interesa else "Me interesa", key=f"si_{jid}",
                           type="primary" if interesa else "secondary",
@@ -445,7 +535,10 @@ if "q0" in ss and not ss.editando:
             f"3. **Subimos las que cumplen tus preferencias.** De las {CANDIDATOS} vacantes que más se parecen a tu "
             "perfil, ganan lugares las que cumplen lo que pediste: ubicación, modalidad, sueldo y experiencia.\n"
             "4. **Aprendemos de ti.** Cuando marcas *Me interesa*, buscamos más vacantes parecidas a esa; cuando "
-            "marcas *No me interesa*, la quitamos y nos alejamos de las que se le parecen.")
+            "marcas *No me interesa*, la quitamos y nos alejamos de las que se le parecen.\n"
+            "5. **Sumamos vacantes de México en vivo.** Consultamos bolsas de trabajo en línea con tu puesto y tu "
+            "ubicación, y las medimos con la misma regla que el catálogo. Si la consulta falla, usamos las últimas "
+            "que guardamos.")
     with st.expander("¿Y las que no coinciden? Compara con vacantes de coincidencia media y baja",
                      icon=":material/compare_arrows:"):
         st.caption("Estas vacantes quedan lejos de tu perfil y por eso no aparecen en tu lista. Te las mostramos "
@@ -470,9 +563,8 @@ if "q0" in ss and not ss.editando:
         with st.expander(f"Vacantes que descartaste ({len(ss.no_gustan)})", icon=":material/visibility_off:"):
             st.caption("Si quitaste alguna por error, recupérala y volverá a tu lista.")
             for idx in reversed(ss.no_gustan):
-                v = m.cat.iloc[idx]
-                empresa = v["company_name"] if isinstance(v["company_name"], str) else "Empresa no indicada"
+                titulo, empresa, ubic = ficha(idx)
                 with st.container(horizontal=True, vertical_alignment="center", key=f"desc_{idx}"):
-                    st.markdown(f"**{v['title']}**  \n:gray[{empresa} · {v['location']}]")
+                    st.markdown(f"**{titulo}**  \n:gray[{empresa} · {ubic}]")
                     st.space("stretch")
                     st.button("Recuperar", icon=":material/undo:", key=f"rec_{idx}", on_click=recuperar, args=(idx,))

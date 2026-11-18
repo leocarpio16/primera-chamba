@@ -10,6 +10,13 @@ Puntaje (PRD §5.1) en dos etapas:
    consulta. Se estandariza porque los cosenos de e5 se amontonan (0.86–0.89 en el top) y un bono absoluto los
    aplastaría. Medido con perfiles de prueba: z ≈ 6.4 en el 1.º lugar y ≈ 3.5 en el 300.º, así que con las cuatro
    preferencias cumplidas (+2.0) una vacante del lugar 300 sube a cerca del top 15.
+
+Vacantes en vivo de México (bloque 5, `en_vivo.py`): se comparan con la misma consulta en inglés y se estandarizan con la
+media y la desviación del catálogo, así quedan en la misma escala que las 110,928. Elegido con las 30 vacantes reales del
+sondeo (`docs/ESTADO.md`): comparar el perfil en español con vacantes en español las sube para cualquier perfil (con
+"Enfermera" quedaban en el lugar ~1,200), mientras que el perfil traducido las separa igual que traducir también las
+vacantes (lugar ~250 con "Analista de datos", más allá del 9,000 con perfiles ajenos) sin cargar un segundo traductor.
+Como la API ya filtra por puesto, entran al ranking las que tienen coincidencia Media o mejor (`LUGAR_MAX_VIVAS`).
 """
 import unicodedata
 from dataclasses import dataclass, field
@@ -25,6 +32,7 @@ CLAVE = "e5"
 CANDIDATOS = 300
 BONO = 0.5
 ALFA, BETA, GAMMA = 1.0, 0.75, 0.15  # Rocchio (PRD §5.2)
+LUGAR_MAX_VIVAS = 5000  # coincidencia Media o mejor
 
 # Etiqueta del formulario → (valor del dataset, texto en inglés para la consulta).
 NIVELES = {
@@ -121,39 +129,86 @@ class Motor:
         self.cat = pd.read_parquet(em.PROCESADO / "vacantes.parquet", columns=COLUMNAS)
         self.E = np.asarray(em.cargar_indice(CLAVE), dtype=np.float32)
         self.modelo = em.cargar_modelo(CLAVE)
-        self._ubic = self.cat["location"].map(_norm).to_numpy()
 
     def vector(self, texto: str) -> np.ndarray:
         return self.modelo.encode([em.MODELOS[CLAVE][2] + texto], normalize_embeddings=True)[0]
 
-    def rocchio(self, q0: np.ndarray, gustan: list[int], no_gustan: list[int]) -> np.ndarray:
-        """q' = α·q + β·media(👍) − γ·media(👎), normalizado."""
+    def preparar_vivas(self, vacantes: list[dict]) -> tuple[pd.DataFrame, dict[str, np.ndarray]]:
+        """Vacantes en vivo → (tabla con las columnas del catálogo, {id: vector}). Mismo texto que el índice:
+        título + 70 palabras de la descripción."""
+        if not vacantes:
+            return pd.DataFrame(), {}
+        df = pd.DataFrame(vacantes).drop_duplicates("id")
+        textos = [em.MODELOS[CLAVE][1] + f"{t}. " + " ".join(d.split()[:em.N_PALABRAS])
+                  for t, d in zip(df["titulo"], df["descripcion"])]
+        V = self.modelo.encode(textos, normalize_embeddings=True)
+        tabla = pd.DataFrame({
+            "idx": df["id"], "job_id": df["id"], "company_name": df["empresa"], "title": df["titulo"],
+            "location": df["ubicacion"], "estado": None, "remoto": df["remoto"],
+            "tipo_empleo": df["tipo_texto"].fillna(df["tipos"].map(lambda t: TIPO_ES.get(t[0]) if t else None)),
+            "tipos": df["tipos"], "nivel": None, "sueldo_mensual": df["sueldo_mensual"], "job_posting_url": df["url"],
+            "publicador": df["publicador"], "publicada": df["publicada"], "descripcion": df["descripcion"],
+            "origen": "vivo"}).reset_index(drop=True)
+        return tabla, dict(zip(tabla["idx"], V))
+
+    def _vectores(self, ids: list, vivas: dict[str, np.ndarray]) -> np.ndarray:
+        """Vectores de vacantes calificadas; se omiten las en vivo que ya no están (p. ej., tras volver a consultar)."""
+        V = [vivas[i] if isinstance(i, str) else self.E[i] for i in ids if not isinstance(i, str) or i in vivas]
+        return np.stack(V) if V else np.empty((0, self.E.shape[1]), dtype=np.float32)
+
+    def rocchio(self, q0: np.ndarray, gustan: list, no_gustan: list, vivas: dict[str, np.ndarray] | None = None) -> np.ndarray:
+        """q' = α·q + β·media(👍) − γ·media(👎), normalizado. Los ids pueden ser del catálogo (int) o en vivo (str)."""
+        vivas = vivas or {}
         q = ALFA * q0
-        if gustan:
-            q = q + BETA * self.E[gustan].mean(axis=0)
-        if no_gustan:
-            q = q - GAMMA * self.E[no_gustan].mean(axis=0)
+        G, N = self._vectores(gustan, vivas), self._vectores(no_gustan, vivas)
+        if len(G):
+            q = q + BETA * G.mean(axis=0)
+        if len(N):
+            q = q - GAMMA * N.mean(axis=0)
         return q / np.linalg.norm(q)
 
-    def rankear(self, q: np.ndarray, perfil: Perfil, excluir: list[int] = (), n: int = 20,
-                tipo_cambio: float = config.TIPO_CAMBIO_MXN_USD) -> pd.DataFrame:
+    def rankear(self, q: np.ndarray, perfil: Perfil, excluir: list = (), n: int = 20,
+                tipo_cambio: float = config.TIPO_CAMBIO_MXN_USD, vivas: pd.DataFrame | None = None,
+                vectores_vivas: dict[str, np.ndarray] | None = None, origen: str = "todas") -> pd.DataFrame:
+        """Ranking del catálogo y, si se dan, de las vacantes en vivo. `origen`: "todas", "catalogo" o "vivo"."""
         cos = self.E @ q
-        z = (cos - cos.mean()) / cos.std()
+        media, desv = cos.mean(), cos.std()
+        z = (cos - media) / desv
         orden_cos = np.sort(cos)
-        filtro = np.zeros(len(cos), dtype=bool)
-        if perfil.tipos_empleo:
-            filtro |= ~self.cat["tipo_empleo"].isin([TIPOS[t] for t in perfil.tipos_empleo]).to_numpy()
-        filtro[list(excluir)] = True
-        zc = np.where(filtro, -np.inf, z)
-        cand = np.argpartition(-zc, CANDIDATOS)[:CANDIDATOS]
-        cand = cand[np.isfinite(zc[cand])]
-
-        sub = self.cat.iloc[cand].copy()
-        sub["idx"] = cand
-        sub["coseno"] = cos[cand]
-        sub["z"] = z[cand]
-        sub["lugar_similitud"] = len(cos) - np.searchsorted(orden_cos, cos[cand], side="right") + 1  # 1 = la más parecida
-        sub["desglose"] = [self._preferencias(i, perfil, tipo_cambio) for i in cand]
+        tipos = [TIPOS[t] for t in perfil.tipos_empleo]
+        partes = []
+        if origen != "vivo":
+            filtro = np.zeros(len(cos), dtype=bool)
+            if tipos:
+                filtro |= ~self.cat["tipo_empleo"].isin(tipos).to_numpy()
+            filtro[[i for i in excluir if not isinstance(i, str)]] = True
+            zc = np.where(filtro, -np.inf, z)
+            cand = np.argpartition(-zc, CANDIDATOS)[:CANDIDATOS]
+            cand = cand[np.isfinite(zc[cand])]
+            sub = self.cat.iloc[cand].copy()
+            sub["idx"] = cand
+            sub["coseno"] = cos[cand]
+            sub["origen"] = "catalogo"
+            sub["desglose"] = [self._preferencias(self._fila(i, tipo_cambio), perfil) for i in cand]
+            partes.append(sub)
+        if origen != "catalogo" and vivas is not None and len(vivas):
+            viv = vivas[~vivas["idx"].isin(list(excluir))].copy()
+            if tipos:  # sin dato de tipo no se descarta
+                viv = viv[viv["tipos"].map(lambda t: not t or any(x in tipos for x in t))]
+            viv["coseno"] = [float(vectores_vivas[i] @ q) for i in viv["idx"]]
+            partes.append(viv)
+        if not partes:
+            return pd.DataFrame()
+        sub = pd.concat(partes, ignore_index=True)
+        if not len(sub):
+            return sub
+        sub["z"] = (sub["coseno"] - media) / desv
+        sub["lugar_similitud"] = len(cos) - np.searchsorted(orden_cos, sub["coseno"].to_numpy(), side="right") + 1
+        es_viva = sub["origen"].eq("vivo")
+        sub = sub[~es_viva | (sub["lugar_similitud"] <= LUGAR_MAX_VIVAS)].copy()
+        es_viva = sub["origen"].eq("vivo")
+        sub.loc[es_viva, "desglose"] = pd.Series([self._preferencias(f, perfil) for _, f in sub[es_viva].iterrows()],
+                                                 index=sub.index[es_viva], dtype=object)
         sub["cumplidas"] = [sum(e == "✓" for e, _, _ in d) for d in sub["desglose"]]
         sub["puntaje"] = sub["z"] + BONO * sub["cumplidas"]
         return sub.sort_values("puntaje", ascending=False).head(n).reset_index(drop=True)
@@ -174,19 +229,26 @@ class Motor:
         sub = self.cat.iloc[idxs].copy()
         sub["idx"] = idxs
         sub["lugar_similitud"] = [k + 1 for k in posiciones]
-        sub["desglose"] = [self._preferencias(i, perfil, tipo_cambio) for i in idxs]
+        sub["desglose"] = [self._preferencias(self._fila(i, tipo_cambio), perfil) for i in idxs]
         return sub.reset_index(drop=True)
 
-    def _preferencias(self, i: int, p: Perfil, tipo_cambio: float) -> list[tuple[str, str, str]]:
-        """[(✓ / ✗ / –, preferencia, explicación en lenguaje común)]. ✓ suma BONO; ✗ y – no suman."""
-        v = self.cat.iloc[i]
+    def _fila(self, i: int, tipo_cambio: float) -> dict:
+        """Vacante del catálogo con el sueldo en pesos al mes (el catálogo está en USD al año)."""
+        v = self.cat.iloc[i].to_dict()
+        v["sueldo_mensual"] = v["sueldo_anual"] * tipo_cambio / 12 if pd.notna(v["sueldo_anual"]) else None
+        return v
+
+    def _preferencias(self, v, p: Perfil) -> list[tuple[str, str, str]]:
+        """[(✓ / ✗ / –, preferencia, explicación en lenguaje común)]. ✓ suma BONO; ✗ y – no suman.
+        `v` es una vacante del catálogo (`_fila`) o en vivo (fila de `preparar_vivas`)."""
         out = []
         # Ubicación: ciudad (texto dentro de la ubicación) y/o estado (abreviatura); si se dan ambos, deben cumplirse ambos.
         ciudades, estados = leer_ubicacion(p.ubicacion)
         if not ciudades and not estados:
             out.append(("–", "Ubicación", "No indicaste dónde quieres trabajar."))
         else:
-            ok_ciudad = not ciudades or any(c in self._ubic[i] for c in ciudades)
+            ubic = _norm(v["location"])
+            ok_ciudad = not ciudades or any(c in ubic for c in ciudades)
             ok_estado = not estados or v["estado"] in estados
             if ok_ciudad and ok_estado:
                 out.append(("✓", "Ubicación", f"Está en {v['location']}, donde quieres trabajar."))
@@ -196,17 +258,20 @@ class Motor:
         if p.modalidad == "Me da igual":
             out.append(("–", "Modalidad", "No indicaste una modalidad."))
         elif p.modalidad == "Remoto":
-            out.append(("✓", "Modalidad", "Se puede trabajar desde casa.") if v["remoto"]
-                       else ("✗", "Modalidad", "El anuncio no dice que se pueda trabajar desde casa."))
+            if v["remoto"] is None or (isinstance(v["remoto"], float) and pd.isna(v["remoto"])):
+                out.append(("–", "Modalidad", "El anuncio no dice si se puede trabajar desde casa."))
+            else:
+                out.append(("✓", "Modalidad", "Se puede trabajar desde casa.") if v["remoto"]
+                           else ("✗", "Modalidad", "El anuncio no dice que se pueda trabajar desde casa."))
         else:
             out.append(("–", "Modalidad", f"El anuncio no dice si es {p.modalidad.lower()}."))
-        # Sueldo: el catálogo está en USD al año
+        # Sueldo, en pesos al mes
+        mensual = v["sueldo_mensual"]
         if not p.sueldo_mxn_mensual:
             out.append(("–", "Sueldo", "No indicaste un sueldo."))
-        elif pd.isna(v["sueldo_anual"]):
+        elif mensual is None or pd.isna(mensual):
             out.append(("–", "Sueldo", "El anuncio no publica el sueldo."))
         else:
-            mensual = v["sueldo_anual"] * tipo_cambio / 12
             if mensual >= p.sueldo_mxn_mensual:
                 out.append(("✓", "Sueldo", f"Paga alrededor de ${mensual:,.0f} al mes, más de lo que pides "
                                            f"(${p.sueldo_mxn_mensual:,.0f})."))
@@ -216,7 +281,7 @@ class Motor:
         # Nivel
         if not p.nivel:
             out.append(("–", "Experiencia", "No indicaste tu nivel de experiencia."))
-        elif pd.isna(v["nivel"]):
+        elif v["nivel"] is None or pd.isna(v["nivel"]):
             out.append(("–", "Experiencia", "El anuncio no dice cuánta experiencia pide."))
         elif v["nivel"] == NIVELES[p.nivel][0]:
             out.append(("✓", "Experiencia", f"Busca a alguien con tu nivel: {NIVEL_ES[v['nivel']].lower()}."))

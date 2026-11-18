@@ -1,6 +1,6 @@
 # Estado · Primera chamba
 
-**Bloque actual:** 4 cerrado. Siguiente: bloque 5 (API en vivo + caché).
+**Bloque actual:** 5 cerrado. Siguiente: bloque 6 (CV por reglas + PDF).
 
 ## Hecho
 - 2026-11-17 · Entrevista socrática y PRD v1.0 aprobado.
@@ -38,12 +38,23 @@
   recuperar después ("Vacantes que descartaste"); sección para comparar con vacantes de coincidencia media y baja
   (lugares 1,000 / 2,500 / 5,000 y 20,000 / 60,000 / última); "¿Cómo elegimos?" y la comparación van al final.
 
-## Pendiente del bloque 5
-- [ ] JSearch `/search-v2` (principal) y Adzuna `mx` (respaldo) con caché en disco en `cache/`; si la API falla,
-  mostrar lo último en caché marcado como tal. Presupuesto: 199 llamadas de JSearch.
-- [ ] Puntuar las vacantes en vivo (en español) en el mismo ranking. Ojo: el perfil se traduce al inglés para el
-  catálogo; para vacantes en español conviene comparar con el perfil original (por decidir con datos).
-- [ ] La ubicación solo puede coincidir con vacantes en vivo (el catálogo es de EE. UU.).
+## Bloque 5 (cerrado 2026-11-18)
+- [x] `primera_chamba/en_vivo.py`: caché vigente 24 h → JSearch → Adzuna → lo último guardado (marcado como tal).
+  Caché en `cache/en_vivo/<hash de la consulta>.json`; bitácora de llamadas (sin claves) en `cache/en_vivo/llamadas.jsonl`.
+  `PC_SIN_RED=1` impide toda llamada (pruebas). Los errores no incluyen `str(e)`: la URL de Adzuna lleva la clave.
+- [x] Puntaje en el mismo ranking (`motor.rankear(..., vivas=..., origen=...)`) y Rocchio con ids mixtos (int / "mx_…").
+  Catálogo sin cambios: 9 rankings (3 perfiles × base, Rocchio con exclusiones, comparación) idénticos a `HEAD`.
+- [x] App: selector Todas / México, en vivo / Catálogo de EE. UU.; etiqueta "En vivo · México"; aviso de caché vencida;
+  interruptor en la barra lateral; en "Detalle técnico": cuota, "Simular que la API no responde" y "Volver a consultar".
+- [x] Pruebas sin gastar llamadas (AppTest + Chrome): marcar/descartar/deshacer/recuperar vacantes en vivo, simular
+  caída (muestra las guardadas), perfil sin caché (solo catálogo), apagar/encender en vivo. Sin excepciones.
+- [x] Llamadas reales con el código nuevo (2026-11-18 00:30, OK del usuario): JSearch "Analista de datos en Ciudad de
+  México" → 10 vacantes en CDMX (LinkedIn, Indeed, Computrabajo, Bumeran, JobLeads, Citi Careers), 7.1 s, ninguna con
+  sueldo; cuota restante 198 según el encabezado. Adzuna (llamada directa) → 20 vacantes, 18 con sueldo, 2.7 s.
+- [x] El perfil de ejemplo y `?demo=1` usan "Ciudad de México" (decisión del usuario); la demo sale de la caché
+  (9 de 10 vacantes entran) sin llamadas.
+- [ ] **Viernes por la mañana:** precargar la caché de la demo (vence 24 h después; 1 llamada de JSearch) con
+  "Volver a consultar la API" en la barra lateral o abriendo `?demo=1` después de que venza.
 
 ## Decisiones
 - Claves en `.env` vía python-dotenv; en la nube, la variable de entorno tiene prioridad.
@@ -53,6 +64,26 @@
   de la demo; el resto queda para consultas en vivo. Adzuna solo si JSearch falla.
 
 ## Hallazgos verificados
+### Vacantes en vivo (bloque 5, con las 30 vacantes reales del sondeo, 0 llamadas)
+- Lugar implícito en el catálogo (mediana) con tres formas de comparar vacantes en español:
+
+  | perfil | A: perfil es · vacante es | B: perfil traducido · vacante es | C: ambos en inglés |
+  |---|---|---|---|
+  | Analista de datos (relevante) | 2 | 256 | 250 |
+  | Enfermera | 1,201 | 35,434 | 40,123 |
+  | Chofer repartidor | 70 | 26,093 | 43,628 |
+  | Diseñador gráfico | 196 | 19,633 | 17,562 |
+  | Contador | 101 | 9,084 | 10,036 |
+
+  A sube cualquier vacante en español para cualquier perfil (sesgo de idioma) → descartada. B ≈ C → **se elige B**
+  (no requiere cargar MarianMT es → en). Umbral de entrada: lugar ≤ 5,000 (coincidencia Media o mejor); con
+  "Analista de datos" pasan 26–30 de 30, con "Enfermera" ninguna.
+- Con la misma regla, las vacantes en vivo no llegan al top 15 de "Todas": con "Analista de datos · Ciudad de México"
+  la mejor queda en el lugar 18 (25 si pide remoto). Por eso el selector "México, en vivo".
+- Adzuna: 13 de 20 traen sueldo; anual en pesos (115,200–300,000 → 9,600–25,000 al mes). JSearch: el sondeo no trajo
+  sueldo; si llega, se asume MXN (**por verificar**: la respuesta no indica moneda).
+- Preparar 30 vacantes en vivo (e5): 0.5 s.
+
 ### App (bloque 4)
 - Puntaje: solo compiten las 300 vacantes más parecidas; puntaje = z + 0.5 × preferencias cumplidas (ubicación,
   modalidad, sueldo, nivel). Con perfiles de prueba, z ≈ 6.4 en el 1.º lugar y ≈ 3.5 en el 300.º.
