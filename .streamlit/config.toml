@@ -1,0 +1,17 @@
+# Tema de la app: página clara, tarjeta del formulario oscura (estilos finos en app.py → ESTILOS).
+[theme]
+base = "light"
+primaryColor = "#0b0b0c"
+backgroundColor = "#f6f6f4"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#0b0b0c"
+borderColor = "#e4e4e1"
+linkColor = "#0b0b0c"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+headingFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&display=swap, monospace"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&display=swap, monospace"
+baseRadius = "10px"
+showWidgetBorder = true
+
+[browser]
+gatherUsageStats = false

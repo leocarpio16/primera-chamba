@@ -27,6 +27,12 @@
 - 2026-11-17 · **Bloque 4:** `primera_chamba/motor.py` (perfil → consulta en inglés → e5 → puntaje con bonos →
   Rocchio), `primera_chamba/traduccion.py` (MarianMT con caché en memoria) y `app.py` (`streamlit run app.py`).
   Verificado con `streamlit.testing.v1.AppTest` (ejemplo → buscar → 👍 → 👎, sin excepciones) y con el servidor local.
+- 2026-11-17 · **Diseño de la app** con la plantilla del usuario (formulario por pasos, tarjeta negra sobre página
+  clara, JetBrains Mono + Inter; tema en `.streamlit/config.toml`). Ajustes pedidos: votos con texto e íconos
+  ("Me interesa" / "No me interesa", sin emojis), explicación para todo público (coincidencia Muy alta/Alta/Media/
+  Baja según el lugar por parecido: ≤50, ≤500, ≤5,000; detalle técnico en letra chica) y ubicación con formato
+  explícito (el motor entiende estados completos en inglés o español). `?demo=1` abre la demo ya buscada.
+  Revisado en Chrome (formulario, resultados, marcar/desmarcar, descartar).
 
 ## Pendiente del bloque 5
 - [ ] JSearch `/search-v2` (principal) y Adzuna `mx` (respaldo) con caché en disco en `cache/`; si la API falla,
@@ -52,6 +58,8 @@
 - Tipo de cambio: FIX de Banxico del 2026-11-17 = 18.4677 MXN/USD (tuit de Banxico reproducido por Milenio); editable.
 - Memoria: el motor ocupa ~1.0 GB (e5 + MarianMT es→en + índice float32 + catálogo sin descripciones). Las
   descripciones se leen bajo demanda con un filtro de pyarrow (~0.3 s), porque cargarlas todas costaría 0.48 GB.
+- Tras reiniciar el servidor, la primera carga del motor tardó >10 s (hasta ~25 s): **abrir la app antes de presentar**.
+- Streamlit recarga `app.py` al guardar, pero no siempre `primera_chamba/*`: reiniciar el servidor tras cambiar el motor.
 - Tiempos: carga del motor ~8 s (una vez, con `st.cache_resource`), traducción ~3 s la primera vez, ranking 0.06 s.
 
 ### Evaluación (bloque 3) — `notebooks/evaluacion.ipynb`

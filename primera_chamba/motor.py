@@ -63,6 +63,38 @@ def _norm(t: str) -> str:
     t = unicodedata.normalize("NFKD", t or "").encode("ascii", "ignore").decode()
     return " ".join(t.lower().split())
 
+# Estados de EE. UU.: abreviatura → nombres en inglés y en español (para que el usuario no tenga que saber "TX").
+ESTADOS = {
+    "AL": ["alabama"], "AK": ["alaska"], "AZ": ["arizona"], "AR": ["arkansas"], "CA": ["california"],
+    "CO": ["colorado"], "CT": ["connecticut"], "DE": ["delaware"], "DC": ["district of columbia", "distrito de columbia"],
+    "FL": ["florida"], "GA": ["georgia"], "HI": ["hawaii", "hawai"], "ID": ["idaho"], "IL": ["illinois"],
+    "IN": ["indiana"], "IA": ["iowa"], "KS": ["kansas"], "KY": ["kentucky"], "LA": ["louisiana", "luisiana"],
+    "ME": ["maine"], "MD": ["maryland"], "MA": ["massachusetts"], "MI": ["michigan"], "MN": ["minnesota"],
+    "MS": ["mississippi", "misisipi"], "MO": ["missouri", "misuri"], "MT": ["montana"], "NE": ["nebraska"],
+    "NV": ["nevada"], "NH": ["new hampshire", "nuevo hampshire"], "NJ": ["new jersey", "nueva jersey"],
+    "NM": ["new mexico", "nuevo mexico"], "NY": ["new york", "nueva york"],
+    "NC": ["north carolina", "carolina del norte"], "ND": ["north dakota", "dakota del norte"], "OH": ["ohio"],
+    "OK": ["oklahoma"], "OR": ["oregon"], "PA": ["pennsylvania", "pensilvania"], "RI": ["rhode island"],
+    "SC": ["south carolina", "carolina del sur"], "SD": ["south dakota", "dakota del sur"], "TN": ["tennessee"],
+    "TX": ["texas"], "UT": ["utah"], "VT": ["vermont"], "VA": ["virginia"],
+    "WA": ["washington"], "WV": ["west virginia", "virginia occidental"], "WI": ["wisconsin"], "WY": ["wyoming"],
+}
+_NOMBRE_A_ESTADO = {n: c for c, ns in ESTADOS.items() for n in ns} | {c.lower(): c for c in ESTADOS}
+
+
+def leer_ubicacion(texto: str) -> tuple[list[str], list[str]]:
+    """'Austin, Texas' → (['austin'], ['TX']). Cada parte separada por coma es un estado (nombre o abreviatura) o una ciudad."""
+    ciudades, estados = [], []
+    for parte in (texto or "").split(","):
+        parte = _norm(parte)
+        if not parte:
+            continue
+        if parte in _NOMBRE_A_ESTADO:
+            estados.append(_NOMBRE_A_ESTADO[parte])
+        else:
+            ciudades.append(parte)
+    return ciudades, estados
+
 
 def consulta_en(perfil: Perfil) -> tuple[str, bool]:
     """Texto con el formato evaluado: 'puesto. Skills: … . Experience level: … .'. Devuelve (texto, ¿se tradujo?).
@@ -127,44 +159,64 @@ class Motor:
         return sub.sort_values("puntaje", ascending=False).head(n).reset_index(drop=True)
 
     def _preferencias(self, i: int, p: Perfil, tipo_cambio: float) -> list[tuple[str, str, str]]:
-        """[(✓ / ✗ / –, preferencia, detalle)]. ✓ suma BONO; ✗ y – (sin preferencia o sin dato) no suman."""
+        """[(✓ / ✗ / –, preferencia, explicación en lenguaje común)]. ✓ suma BONO; ✗ y – no suman."""
         v = self.cat.iloc[i]
         out = []
-        # Ubicación
-        if not p.ubicacion.strip():
-            out.append(("–", "Ubicación", "sin preferencia"))
-        elif _norm(p.ubicacion) in self._ubic[i]:
-            out.append(("✓", "Ubicación", v["location"]))
+        # Ubicación: ciudad (texto dentro de la ubicación) y/o estado (abreviatura); si se dan ambos, deben cumplirse ambos.
+        ciudades, estados = leer_ubicacion(p.ubicacion)
+        if not ciudades and not estados:
+            out.append(("–", "Ubicación", "No indicaste dónde quieres trabajar."))
         else:
-            out.append(("✗", "Ubicación", f"la vacante es en {v['location']}"))
+            ok_ciudad = not ciudades or any(c in self._ubic[i] for c in ciudades)
+            ok_estado = not estados or v["estado"] in estados
+            if ok_ciudad and ok_estado:
+                out.append(("✓", "Ubicación", f"Está en {v['location']}, donde quieres trabajar."))
+            else:
+                out.append(("✗", "Ubicación", f"Está en {v['location']}; tú buscas en {p.ubicacion.strip()}."))
         # Modalidad: el catálogo solo marca "remoto permitido"; no hay dato de presencial ni de híbrido.
         if p.modalidad == "Me da igual":
-            out.append(("–", "Modalidad", "sin preferencia"))
+            out.append(("–", "Modalidad", "No indicaste una modalidad."))
         elif p.modalidad == "Remoto":
-            out.append(("✓", "Modalidad", "permite remoto") if v["remoto"]
-                       else ("✗", "Modalidad", "el anuncio no dice que sea remoto"))
+            out.append(("✓", "Modalidad", "Se puede trabajar desde casa.") if v["remoto"]
+                       else ("✗", "Modalidad", "El anuncio no dice que se pueda trabajar desde casa."))
         else:
-            out.append(("–", "Modalidad", f"el catálogo no indica si es {p.modalidad.lower()}"))
+            out.append(("–", "Modalidad", f"El anuncio no dice si es {p.modalidad.lower()}."))
         # Sueldo: el catálogo está en USD al año
         if not p.sueldo_mxn_mensual:
-            out.append(("–", "Sueldo", "sin preferencia"))
+            out.append(("–", "Sueldo", "No indicaste un sueldo."))
         elif pd.isna(v["sueldo_anual"]):
-            out.append(("–", "Sueldo", "el anuncio no publica sueldo"))
+            out.append(("–", "Sueldo", "El anuncio no publica el sueldo."))
         else:
             mensual = v["sueldo_anual"] * tipo_cambio / 12
-            ok = mensual >= p.sueldo_mxn_mensual
-            out.append(("✓" if ok else "✗", "Sueldo", f"≈ ${mensual:,.0f} MXN al mes"))
+            if mensual >= p.sueldo_mxn_mensual:
+                out.append(("✓", "Sueldo", f"Paga alrededor de ${mensual:,.0f} al mes, más de lo que pides "
+                                           f"(${p.sueldo_mxn_mensual:,.0f})."))
+            else:
+                out.append(("✗", "Sueldo", f"Paga alrededor de ${mensual:,.0f} al mes, menos de lo que pides "
+                                           f"(${p.sueldo_mxn_mensual:,.0f})."))
         # Nivel
         if not p.nivel:
-            out.append(("–", "Nivel", "sin preferencia"))
+            out.append(("–", "Experiencia", "No indicaste tu nivel de experiencia."))
         elif pd.isna(v["nivel"]):
-            out.append(("–", "Nivel", "el anuncio no indica nivel"))
+            out.append(("–", "Experiencia", "El anuncio no dice cuánta experiencia pide."))
         elif v["nivel"] == NIVELES[p.nivel][0]:
-            out.append(("✓", "Nivel", NIVEL_ES[v["nivel"]]))
+            out.append(("✓", "Experiencia", f"Busca a alguien con tu nivel: {NIVEL_ES[v['nivel']].lower()}."))
         else:
-            out.append(("✗", "Nivel", f"pide {NIVEL_ES.get(v['nivel'], v['nivel']).lower()}"))
+            out.append(("✗", "Experiencia", f"Pide otro nivel: {NIVEL_ES.get(v['nivel'], v['nivel']).lower()} "
+                                            f"(tú: {p.nivel.lower()})."))
         return out
 
+
+def coincidencia(lugar: int) -> tuple[str, int]:
+    """Etiqueta para todo público a partir del lugar por parecido entre las 110,928 vacantes (1 = la más parecida).
+    Devuelve (etiqueta, nivel de 1 a 4)."""
+    if lugar <= 50:
+        return "Muy alta", 4
+    if lugar <= 500:
+        return "Alta", 3
+    if lugar <= 5000:
+        return "Media", 2
+    return "Baja", 1
 
 def descripciones(job_ids: list[int]) -> dict[int, str]:
     """Lee solo las descripciones pedidas (cargarlas todas costaría ~0.5 GB de RAM)."""
