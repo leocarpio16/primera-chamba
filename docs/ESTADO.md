@@ -1,6 +1,6 @@
 # Estado · Primera chamba
 
-**Bloque actual:** 6 cerrado. Siguiente: bloque 7 (presentación + guion de demo).
+**Bloque actual:** 7 casi cerrado (falta el ensayo del usuario). Siguiente: bloque 8 (README, publicación o demo local).
 
 ## Hecho
 - 2026-11-17 · Entrevista socrática y PRD v1.0 aprobado.
@@ -92,6 +92,16 @@
 - [x] Las llamadas reales a Gemini se anotan en `cache/en_vivo/llamadas.jsonl` (fuente "Gemini", solo estado) y se cuentan
   por día en "Detalle técnico". `PC_SIN_RED=1` también bloquea Gemini. Las 5 llamadas del 2026-11-18 son anteriores a
   la bitácora y no aparecen en ella.
+
+## Bloque 7 (2026-11-18)
+- [x] Presentación de 14 diapositivas (Slides en claude.ai, privada): https://claude.ai/artifact/CXHAyrNFEFwyG22H2hS4oz
+  Problema → propuesta → datos → motor → evaluación (tabla) → prueba en español (gráfica) → explicación → en vivo →
+  CV → demo → límites → cierre. Todas las cifras salen de este archivo y de `datos/procesado/evaluacion_*.csv`; notas
+  del orador en cada diapositiva. Mismo estilo que la app (JetBrains Mono + Inter, claro con negro, acento azul);
+  gráfica con la paleta validada (azul/naranja/aqua, valores escritos en cada barra).
+- [x] `docs/GUION_DEMO.md`: preparación del viernes, recorrido de 10 pasos con tiempos y qué decir, plan B por falla.
+- [x] Ensayo técnico en Chrome sin gastar llamadas: todo el recorrido sin errores (tiempos en el guion).
+- [ ] **Ensayo del usuario** de principio a fin con cronómetro.
 
 ## Decisiones
 - Claves en `.env` vía python-dotenv; en la nube, la variable de entorno tiene prioridad.
