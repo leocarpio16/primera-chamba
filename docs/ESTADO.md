@@ -1,6 +1,7 @@
 # Estado · Primera chamba
 
-**Bloque actual:** 7 casi cerrado (falta el ensayo del usuario). Siguiente: bloque 8 (README, publicación o demo local).
+**Bloque actual:** 8 cerrado (demo local). Pendiente: ensayo del usuario y, el viernes por la mañana con su OK, renovar
+la caché de la demo (JSearch) y probar Gemini.
 
 ## Hecho
 - 2026-11-17 · Entrevista socrática y PRD v1.0 aprobado.
@@ -110,6 +111,16 @@
 - [x] `docs/GUION_DEMO.md`: preparación del viernes, recorrido de 10 pasos con tiempos y qué decir, plan B por falla.
 - [x] Ensayo técnico en Chrome sin gastar llamadas: todo el recorrido sin errores (tiempos en el guion).
 - [ ] **Ensayo del usuario** de principio a fin con cronómetro.
+
+## Bloque 8 (cerrado 2026-11-18)
+- [x] **Decisión explícita: demo local** (decisión del usuario). No se publica en Streamlit Cloud: `datos/` (664 MB:
+  catálogo e índices) está ignorado y el motor no arranca sin `vacantes.parquet` ni `indice_e5.npy`.
+- [x] README: qué hace, resultados de la evaluación (cifras de este archivo), instalación, construcción de datos
+  (`etl` + `embeddings e5` para la app; los tres índices para el notebook), `streamlit run app.py`, `?demo=1`, claves
+  opcionales, `PC_SIN_RED=1`, estructura y enlaces a la presentación, al guion y al notebook.
+- [x] `kagglehub` agregado a `requirements.txt` (lo usan `etl.py` y `evaluacion.py`; faltaba).
+- [ ] **Viernes por la mañana, con OK:** 1 llamada de JSearch (caché de la demo, vence el 19/11 a las 00:30) y 1 prueba
+  de Gemini que mida los tokens por CV (confirmar el «≈1 centavo» de la diapositiva 14).
 
 ## Decisiones
 - Claves en `.env` vía python-dotenv; en la nube, la variable de entorno tiene prioridad.
