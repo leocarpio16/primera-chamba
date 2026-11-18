@@ -97,6 +97,11 @@ ESTILOS = """
 .pc-nota b { color: var(--negro-tinta); font-weight: 600; }
 [data-testid="stAlertContainer"]:has([data-testid="stAlertContentInfo"]) { background: #ececea; border: 1px solid var(--borde); }
 [data-testid="stAlertContentInfo"], [data-testid="stAlertContentInfo"] * { color: var(--tinta) !important; }
+.st-key-deshacer { background: #ececea; border: 1px dashed #c9c9c5; border-radius: 14px; padding: .55rem .6rem .55rem 1.1rem; }
+.pc-deshacer { margin: 0; color: var(--tinta-2); font-size: .92rem; }
+.pc-deshacer b { color: var(--tinta); font-weight: 600; }
+[class*="st-key-cmp_"] { background: #fbfbfa; border: 1px solid var(--borde); border-radius: 12px; padding: .8rem 1rem .4rem; }
+[class*="st-key-desc_"] { border-bottom: 1px solid var(--borde); padding: .35rem 0; }
 [class*="st-key-acc_"] { border-top: 1px solid var(--borde); padding-top: .55rem; margin-top: .1rem; }
 [class*="st-key-acc_"] [data-testid="stBaseButton-secondary"] { border-radius: 9px; font-size: .88rem; }
 [class*="st-key-acc_"] [data-testid="stBaseButton-primary"] { border-radius: 9px; font-size: .88rem; }
@@ -139,7 +144,7 @@ def textos(ids: tuple[int, ...]) -> dict[int, str]:
 
 
 # ---------------- estado ----------------
-for k, v in {"gustan": [], "no_gustan": [], "lugares_previos": {}, "paso": 1, "datos": dict(VACIO),
+for k, v in {"gustan": [], "no_gustan": [], "lugares_previos": {}, "ultimo_descarte": None, "paso": 1, "datos": dict(VACIO),
              "editando": True}.items():
     ss.setdefault(k, v)
 
@@ -177,15 +182,24 @@ def calificar(idx: int, gusta: bool):
     ss.gustan = [i for i in ss.gustan if i != idx]
     ss.no_gustan = [i for i in ss.no_gustan if i != idx]
     (ss.gustan if gusta else ss.no_gustan).append(idx)
+    ss.ultimo_descarte = None if gusta else idx
 
 
 def quitar_interes(idx: int):
     ss.lugares_previos = dict(ss.get("lugares_actuales", {}))
     ss.gustan = [i for i in ss.gustan if i != idx]
+    ss.ultimo_descarte = None
+
+
+def recuperar(idx: int):
+    """Devuelve a la lista una vacante descartada (por error o por cambio de opinión)."""
+    ss.lugares_previos = dict(ss.get("lugares_actuales", {}))
+    ss.no_gustan = [i for i in ss.no_gustan if i != idx]
+    ss.ultimo_descarte = None
 
 
 def reiniciar_calificaciones():
-    ss.gustan, ss.no_gustan, ss.lugares_previos = [], [], {}
+    ss.gustan, ss.no_gustan, ss.lugares_previos, ss.ultimo_descarte = [], [], {}, None
 
 
 def editar_perfil():
@@ -311,12 +325,13 @@ def lista(nombres: list[str], conj: str = "y") -> str:
     return nombres[0] if len(nombres) == 1 else ", ".join(nombres[:-1]) + f" {conj} " + nombres[-1]
 
 
-def resumen(desglose, etiqueta: str, lugar: int) -> str:
+def resumen(desglose, etiqueta: str, lugar: int, en_lista: bool = True) -> str:
     """Interpretación en dos frases: qué tanto se parece y qué cumple de lo que pediste."""
     cumple = [p for e, p, _ in desglose if e == "✓"]
     no_cumple = [p for e, p, _ in desglose if e == "✗"]
     pidio = [p for e, p, t in desglose if not t.startswith("No indicaste")]
-    lugar_txt = "es la más parecida" if lugar == 1 else f"es la {ordinal(lugar)} más parecida"
+    lugar_txt = ("es la más parecida" if lugar == 1 else "es la menos parecida" if lugar >= 110928
+                 else f"es la {ordinal(lugar)} más parecida")
     frases = [f"{PARECIDO[etiqueta]}: {lugar_txt} de las 110,928 vacantes."]
     if cumple and no_cumple:
         frases.append(f"Cumple con {lista(cumple)}, pero no con {lista(no_cumple, 'ni')}.")
@@ -326,7 +341,7 @@ def resumen(desglose, etiqueta: str, lugar: int) -> str:
         frases.append(f"No cumple con {lista(no_cumple, 'ni')}.")
     elif pidio:
         frases.append("El anuncio no da datos para comparar tus preferencias.")
-    if etiqueta == "Baja" and cumple:
+    if en_lista and etiqueta == "Baja" and cumple:
         frases.append("Aparece en tu lista porque cumple con lo que pediste.")
     return f"**En resumen:** {' '.join(frases)}"
 
@@ -351,25 +366,25 @@ if "q0" in ss and not ss.editando:
         c2.button("Editar", icon=":material/edit:", on_click=editar_perfil, width="stretch")
 
     st.html('<p class="pc-seccion">Vacantes recomendadas</p>')
-    with st.expander("¿Cómo elegimos estas vacantes?"):
-        st.markdown(
-            "1. **Leemos tu perfil.** Las vacantes del catálogo están en inglés, así que traducimos al inglés lo que "
-            "escribiste.\n"
-            "2. **Comparamos el significado, no solo las palabras.** Un modelo de lenguaje compara tu perfil con "
-            "cada una de las 110,928 vacantes y entiende, por ejemplo, que *analista de datos* y *data analyst* son "
-            "el mismo puesto. La **coincidencia** dice qué tanto se parece cada vacante a tu perfil.\n"
-            f"3. **Subimos las que cumplen tus preferencias.** De las {CANDIDATOS} vacantes que más se parecen a tu "
-            "perfil, ganan lugares las que cumplen lo que pediste: ubicación, modalidad, sueldo y experiencia.\n"
-            "4. **Aprendemos de ti.** Cuando marcas *Me interesa*, buscamos más vacantes parecidas a esa; cuando "
-            "marcas *No me interesa*, la quitamos y nos alejamos de las que se le parecen.")
     if calificadas:
         st.info(f"Ajustamos la lista con lo que marcaste: {len(ss.gustan)} te interesan y {len(ss.no_gustan)} no. "
                 "Las flechas indican cuántos lugares subió o bajó cada vacante.", icon=":material/tune:")
 
+    def aviso_deshacer(idx: int):
+        v = m.cat.iloc[idx]
+        with st.container(horizontal=True, vertical_alignment="center", key="deshacer"):
+            st.html(f'<p class="pc-deshacer">Quitaste <b>{escape(v["title"])}</b> de tu lista.</p>')
+            st.space("stretch")
+            st.button("Deshacer", icon=":material/undo:", on_click=recuperar, args=(idx,), key="btn_deshacer")
+
     previos = ss.lugares_previos
+    descarte = ss.ultimo_descarte
+    lugar_descarte = previos.get(int(m.cat["job_id"].iloc[descarte])) if descarte is not None else None
     ss.lugares_actuales = {int(j): i for i, j in enumerate(r["job_id"])}
     for i, f in r.iterrows():
         jid, idx = int(f["job_id"]), int(f["idx"])
+        if lugar_descarte is not None and i == lugar_descarte:
+            aviso_deshacer(descarte)
         mov = ""
         if calificadas and previos:
             antes = previos.get(jid)
@@ -417,3 +432,47 @@ if "q0" in ss and not ss.editando:
                           "Te mostraremos más vacantes parecidas a esta")
                 st.button("No me interesa", key=f"no_{jid}", icon=":material/close:", on_click=calificar,
                           args=(idx, False), help="La quitamos de la lista y nos alejamos de las que se le parecen")
+    if lugar_descarte is not None and lugar_descarte >= len(r):
+        aviso_deshacer(descarte)
+
+    with st.expander("¿Cómo elegimos estas vacantes?", icon=":material/help_outline:"):
+        st.markdown(
+            "1. **Leemos tu perfil.** Las vacantes del catálogo están en inglés, así que traducimos al inglés lo que "
+            "escribiste.\n"
+            "2. **Comparamos el significado, no solo las palabras.** Un modelo de lenguaje compara tu perfil con "
+            "cada una de las 110,928 vacantes y entiende, por ejemplo, que *analista de datos* y *data analyst* son "
+            "el mismo puesto. La **coincidencia** dice qué tanto se parece cada vacante a tu perfil.\n"
+            f"3. **Subimos las que cumplen tus preferencias.** De las {CANDIDATOS} vacantes que más se parecen a tu "
+            "perfil, ganan lugares las que cumplen lo que pediste: ubicación, modalidad, sueldo y experiencia.\n"
+            "4. **Aprendemos de ti.** Cuando marcas *Me interesa*, buscamos más vacantes parecidas a esa; cuando "
+            "marcas *No me interesa*, la quitamos y nos alejamos de las que se le parecen.")
+    with st.expander("¿Y las que no coinciden? Compara con vacantes de coincidencia media y baja",
+                     icon=":material/compare_arrows:"):
+        st.caption("Estas vacantes quedan lejos de tu perfil y por eso no aparecen en tu lista. Te las mostramos "
+                   "para que compares con tus recomendaciones.")
+        lugares = {"Coincidencia media": [1000, 2500, 5000], "Coincidencia baja": [20000, 60000, len(m.cat)]}
+        for titulo, lugs in lugares.items():
+            st.markdown(f"**{titulo}**")
+            for _, g in m.por_lugar(q, perfil, lugs, excluir=ss.no_gustan, tipo_cambio=tipo_cambio).iterrows():
+                etq, niv = coincidencia(int(g["lugar_similitud"]))
+                empresa = g["company_name"] if isinstance(g["company_name"], str) else "Empresa no indicada"
+                meta = f"{empresa} · {g['location']}"
+                barras = "".join(f'<span class="{"on" if k < niv else ""}"></span>' for k in range(4))
+                with st.container(key=f"cmp_{int(g['job_id'])}"):
+                    c1, c2 = st.columns([5, 1.3])
+                    c1.html(f'<p class="pc-vac-titulo">{escape(g["title"])}</p>'
+                            f'<p class="pc-vac-meta">{escape(meta)}</p>')
+                    c2.html(f'<div class="pc-coinc"><div class="l">Coincidencia</div><div class="n">{etq}</div>'
+                            f'<div class="b">{barras}</div></div>')
+                    st.markdown(resumen(g["desglose"], etq, int(g["lugar_similitud"]), en_lista=False))
+
+    if ss.no_gustan:
+        with st.expander(f"Vacantes que descartaste ({len(ss.no_gustan)})", icon=":material/visibility_off:"):
+            st.caption("Si quitaste alguna por error, recupérala y volverá a tu lista.")
+            for idx in reversed(ss.no_gustan):
+                v = m.cat.iloc[idx]
+                empresa = v["company_name"] if isinstance(v["company_name"], str) else "Empresa no indicada"
+                with st.container(horizontal=True, vertical_alignment="center", key=f"desc_{idx}"):
+                    st.markdown(f"**{v['title']}**  \n:gray[{empresa} · {v['location']}]")
+                    st.space("stretch")
+                    st.button("Recuperar", icon=":material/undo:", key=f"rec_{idx}", on_click=recuperar, args=(idx,))

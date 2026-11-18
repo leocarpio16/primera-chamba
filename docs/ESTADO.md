@@ -33,6 +33,10 @@
   Baja según el lugar por parecido: ≤50, ≤500, ≤5,000; detalle técnico en letra chica) y ubicación con formato
   explícito (el motor entiende estados completos en inglés o español). `?demo=1` abre la demo ya buscada.
   Revisado en Chrome (formulario, resultados, marcar/desmarcar, descartar).
+- 2026-11-17 · Más ajustes de la app: la explicación de cada vacante es un resumen en lenguaje común (sin z ni coseno;
+  el detalle técnico vive en la barra lateral); "No me interesa" se puede deshacer (aviso en el lugar de la tarjeta) y
+  recuperar después ("Vacantes que descartaste"); sección para comparar con vacantes de coincidencia media y baja
+  (lugares 1,000 / 2,500 / 5,000 y 20,000 / 60,000 / última); "¿Cómo elegimos?" y la comparación van al final.
 
 ## Pendiente del bloque 5
 - [ ] JSearch `/search-v2` (principal) y Adzuna `mx` (respaldo) con caché en disco en `cache/`; si la API falla,

@@ -158,6 +158,25 @@ class Motor:
         sub["puntaje"] = sub["z"] + BONO * sub["cumplidas"]
         return sub.sort_values("puntaje", ascending=False).head(n).reset_index(drop=True)
 
+    def por_lugar(self, q: np.ndarray, perfil: Perfil, lugares: list[int], excluir: list[int] = (),
+                  tipo_cambio: float = config.TIPO_CAMBIO_MXN_USD) -> pd.DataFrame:
+        """Vacantes que ocupan ciertos lugares por parecido con el perfil (1 = la más parecida), sin preferencias ni
+        filtros. Sirve para comparar el ranking con vacantes de coincidencia media y baja."""
+        orden = np.argsort(-(self.E @ q))  # orden[k] = vacante en el lugar k + 1 de todo el catálogo
+        fuera = set(excluir)
+        posiciones = []
+        for lugar in lugares:
+            k = min(lugar, len(orden)) - 1
+            while orden[k] in fuera and k > 0:  # si la vacante de ese lugar está descartada, la anterior
+                k -= 1
+            posiciones.append(k)
+        idxs = orden[posiciones]
+        sub = self.cat.iloc[idxs].copy()
+        sub["idx"] = idxs
+        sub["lugar_similitud"] = [k + 1 for k in posiciones]
+        sub["desglose"] = [self._preferencias(i, perfil, tipo_cambio) for i in idxs]
+        return sub.reset_index(drop=True)
+
     def _preferencias(self, i: int, p: Perfil, tipo_cambio: float) -> list[tuple[str, str, str]]:
         """[(✓ / ✗ / –, preferencia, explicación en lenguaje común)]. ✓ suma BONO; ✗ y – no suman."""
         v = self.cat.iloc[i]
