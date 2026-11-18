@@ -99,6 +99,14 @@
   CV → demo → límites → cierre. Todas las cifras salen de este archivo y de `datos/procesado/evaluacion_*.csv`; notas
   del orador en cada diapositiva. Mismo estilo que la app (JetBrains Mono + Inter, claro con negro, acento azul);
   gráfica con la paleta validada (azul/naranja/aqua, valores escritos en cada barra).
+- [x] Diapositivas 6–9 reescritas para todo público (examen con respuestas conocidas; «veces mejor que al azar» =
+  nDCG@10 ÷ nDCG@10 del azar; «cuánto conserva en español» = nDCG en español ÷ nDCG en inglés del mismo modelo; ejemplo
+  real de la demo: la vacante #1 era la 2.ª más parecida y subió por cumplir el nivel). Lo técnico quedó en las notas.
+- [x] Diapositiva 14 «Propuesta de inversión» (antes del cierre). Precio de Gemini 3.8 Flash **verificado** en la página
+  oficial (aistudio.google.com/docs/pricing, 2026-11-18): US$0.75 / US$3.75 por millón de tokens de entrada / salida
+  hasta el 31/12/2026 (US$1.50 / US$7.50 desde el 1/1/2027); el nivel de pago no usa los datos para mejorar productos.
+  **Por verificar:** costo por CV (≈ US$0.008, estimado con ~3,000 tokens) y plan Pro de JSearch (US$25 al mes por
+  10,000 consultas, según comparadores; la página de OpenWeb Ninja no publica precios).
 - [x] `docs/GUION_DEMO.md`: preparación del viernes, recorrido de 10 pasos con tiempos y qué decir, plan B por falla.
 - [x] Ensayo técnico en Chrome sin gastar llamadas: todo el recorrido sin errores (tiempos en el guion).
 - [ ] **Ensayo del usuario** de principio a fin con cronómetro.
