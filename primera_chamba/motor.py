@@ -61,10 +61,7 @@ class Perfil:
     modalidad: str = "Me da igual"
     sueldo_mxn_mensual: float | None = None
     tipos_empleo: list[str] = field(default_factory=list)  # llaves de TIPOS; vacío = todos
-    # Solo para el CV (bloque 6); no entran al ranking.
-    experiencias: str = ""
-    educacion: str = ""
-    descripcion: str = ""
+    # Lo que solo sirve para el CV (contacto, experiencias, estudios…) vive en `cv.DatosCV`; no entra al ranking.
 
 
 def _norm(t: str) -> str:
@@ -132,6 +129,10 @@ class Motor:
 
     def vector(self, texto: str) -> np.ndarray:
         return self.modelo.encode([em.MODELOS[CLAVE][2] + texto], normalize_embeddings=True)[0]
+
+    def vectores(self, textos: list[str]) -> np.ndarray:
+        """Varios textos del usuario a la vez (para el CV), con el mismo prefijo de consulta que el perfil."""
+        return self.modelo.encode([em.MODELOS[CLAVE][2] + t for t in textos], normalize_embeddings=True)
 
     def preparar_vivas(self, vacantes: list[dict]) -> tuple[pd.DataFrame, dict[str, np.ndarray]]:
         """Vacantes en vivo → (tabla con las columnas del catálogo, {id: vector}). Mismo texto que el índice:

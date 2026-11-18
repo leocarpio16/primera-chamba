@@ -1,6 +1,6 @@
 # Estado · Primera chamba
 
-**Bloque actual:** 5 cerrado. Siguiente: bloque 6 (CV por reglas + PDF).
+**Bloque actual:** 6 cerrado. Siguiente: bloque 7 (presentación + guion de demo).
 
 ## Hecho
 - 2026-11-17 · Entrevista socrática y PRD v1.0 aprobado.
@@ -55,6 +55,40 @@
   (9 de 10 vacantes entran) sin llamadas.
 - [ ] **Viernes por la mañana:** precargar la caché de la demo (vence 24 h después; 1 llamada de JSearch) con
   "Volver a consultar la API" en la barra lateral o abriendo `?demo=1` después de que venza.
+
+## Bloque 6 (cerrado 2026-11-18)
+- [x] **Encuesta ampliada a 5 pasos** (pedido del usuario: más datos para un CV completo). 1 Tu puesto · 2 Preferencias ·
+  3 Sobre ti (nombre, correo, teléfono, enlace, presentación, empleo ideal) · 4 Tu experiencia (hasta 4 entradas: puesto,
+  tipo, organización, periodo, logros uno por línea; agregar/quitar) · 5 Educación y más (hasta 3 estudios, idiomas,
+  cursos, otros). Solo el paso 1 es obligatorio; del 3 al 5 no cambian el ranking. Ejemplo ampliado (incluye un empleo
+  ajeno al puesto para que se vea el reordenamiento).
+- [x] `primera_chamba/cv.py`: CV por reglas. Cada experiencia, logro, habilidad y curso se traduce es → en y se compara
+  con la vacante con e5 (mismo prefijo de consulta que el perfil). Orden: experiencias y logros por parecido;
+  habilidades, primero las que menciona el anuncio. Recorte fijo: 4 logros por experiencia, 12 habilidades, 5 cursos; lo
+  que queda fuera se muestra al usuario. Con el ejemplo, la experiencia de ventas queda última en las 3 primeras vacantes
+  de "Analista de datos" (similitud 0.75–0.77 contra 0.79–0.82). Tarda 2.4–3.8 s por vacante (RSS máx 1.1 GB en la prueba).
+- [x] `primera_chamba/habilidades.py`: vocabulario fijo de 113 habilidades (alias en inglés y español). El dataset solo trae
+  categorías amplias (IT, SALE…), que no sirven para avisar faltantes. Medido con 3,000 descripciones del catálogo: 17 ms
+  por vacante, mediana de 3 habilidades detectadas, 385 sin ninguna. Se quitaron alias genéricos tras revisar contextos
+  reales ("sales", "maintenance", "inventory", "recruiting", "talent acquisition", "english", "rcp"). En la vacante en
+  vivo "Analista de Datos Antifraude", "rcp" era "enfoque RCP", no primeros auxilios. Es una heurística: puede fallar
+  con frases poco comunes.
+- [x] App: botón "Armar mi CV" en cada vacante (catálogo y en vivo). Vista del CV con "Lo que pide esta vacante" (las tienes
+  / las mencionas en otro campo / no están en tu perfil: **nunca entran al CV**), editor por secciones (`persist_state=
+  "page"`: lo editado se conserva por vacante al ir y volver), "Restablecer", "Editar", "Volver", descarga en PDF y
+  "¿Cómo armamos tu CV?".
+- [x] PDF con fpdf2 2.9.0 y DejaVu Sans (copiada de matplotlib a `primera_chamba/fuentes/` con su licencia, para acentos,
+  «·» y «•» sin depender del sistema). Revisado: 1 página A4 con el ejemplo completo.
+- [x] Gemini opcional: solo manda perfil y experiencia (sin nombre ni contacto); se rechaza la respuesta si agrega cifras,
+  habilidades del vocabulario, logros o si cambia encabezados (probado con 6 respuestas simuladas: 1 aceptada, 5
+  rechazadas). Los errores muestran tipo y código, nunca `str(e)`.
+- [x] Prueba con **Gemini apagado** (`GEMINI_API_KEY=` vacío, AppTest sin red): 5 pasos, agregar/quitar entradas, buscar,
+  armar CV (catálogo y en vivo), editar, volver, regresar (edición conservada), restablecer, Editar desde el CV. Sin
+  excepciones. Revisión visual en Chrome (formulario, vista del CV, tarjeta con el botón).
+- [ ] **Gemini real: por verificar.** 5 llamadas el 2026-11-18, ninguna generó texto: `gemini-2.5-flash` → 404 ("no
+  longer available to new users"); `gemini-3.8-flash` → 5xx (29 s) y después 503 "high demand"; `gemini-flash-latest` →
+  503. La clave sirve (no hubo 401/403). Modelo por defecto: `gemini-3.8-flash` (variable `GEMINI_MODELO`). En todas las
+  fallas salió el CV por reglas con la nota discreta. Reintentar antes de la demo, con OK del usuario.
 
 ## Decisiones
 - Claves en `.env` vía python-dotenv; en la nube, la variable de entorno tiene prioridad.

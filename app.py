@@ -3,12 +3,14 @@
 Diseño: página clara con la tarjeta del formulario en negro (formulario por pasos con barra de avance), títulos en
 monoespaciada y resultados en tarjetas blancas. El tema base está en `.streamlit/config.toml`; los detalles, en ESTILOS.
 """
+import re
 from datetime import datetime
 from html import escape
 
 import streamlit as st
 
-from primera_chamba import config, en_vivo
+from primera_chamba import config, cv, en_vivo
+from primera_chamba import habilidades as hab
 from primera_chamba.motor import (BONO, CANDIDATOS, LUGAR_MAX_VIVAS, MODALIDADES, NIVEL_ES, NIVELES, TIPO_ES, TIPOS,
                                   Motor, Perfil, coincidencia, consulta_en, descripciones)
 
@@ -70,6 +72,8 @@ ESTILOS = """
 .st-key-asistente [data-testid="stBaseButton-tertiary"]:hover p { color: var(--negro-tinta) !important; }
 .st-key-asistente [data-testid="stAlert"] { background: #2a1d1d; }
 .st-key-asistente [data-testid="stAlert"] p { color: #fca5a5 !important; }
+[class*="st-key-exp_"], [class*="st-key-edu_"] { background: #19191c; border: 1px solid var(--negro-borde);
+  border-radius: 12px; padding: .75rem .9rem .2rem; }
 
 /* Resumen del perfil y tarjetas de vacantes (claras) */
 [class*="st-key-vac_"] { background: var(--blanco); border: 1px solid var(--borde) !important;
@@ -77,6 +81,17 @@ ESTILOS = """
 .st-key-resumen { background: var(--negro-1); border: 1px solid var(--negro-borde); border-radius: 14px;
   padding: .9rem 1.1rem; box-shadow: 0 18px 40px -22px rgba(0,0,0,.45); }
 .st-key-resumen p { color: var(--negro-tinta-2) !important; }
+.st-key-cvcab { background: var(--negro-1); border: 1px solid var(--negro-borde); border-radius: 14px;
+  padding: .9rem 1.1rem; box-shadow: 0 18px 40px -22px rgba(0,0,0,.45); }
+.st-key-cvcab .pc-cv-l { color: var(--negro-tinta-2); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
+  font-family: "JetBrains Mono", monospace; margin: 0; }
+.st-key-cvcab .pc-cv-t { color: var(--negro-tinta); font-weight: 600; font-size: 1.05rem; margin: .1rem 0 0; }
+.st-key-cvcab .pc-cv-m { color: var(--negro-tinta-2); font-size: .86rem; margin: 0; }
+.st-key-cvcab [data-testid="stBaseButton-secondary"] { background: var(--blanco); border: none; border-radius: 10px; }
+.st-key-cvcab [data-testid="stBaseButton-secondary"] p,
+.st-key-cvcab [data-testid="stBaseButton-secondary"] span { color: var(--tinta) !important; font-weight: 600; }
+.st-key-cveditor { background: var(--blanco); border: 1px solid var(--borde); border-radius: 14px; padding: 1rem 1.2rem .4rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px -16px rgba(0,0,0,.18); }
 .st-key-resumen strong { color: var(--negro-tinta) !important; }
 .st-key-resumen [data-testid="stBaseButton-secondary"] { background: var(--blanco); border: none; border-radius: 10px; }
 .st-key-resumen [data-testid="stBaseButton-secondary"] p,
@@ -112,27 +127,64 @@ ESTILOS = """
 </style>
 """
 
+MAX_EXP, MAX_EDU = 4, 3
+CAMPOS_EXP = ["puesto", "tipo", "org", "periodo", "logros"]
+CAMPOS_EDU = ["titulo", "inst", "periodo", "detalle"]
 EJEMPLO = {
     "puesto": "Analista de datos",
     "nivel": "Sin experiencia / recién egresado",
-    "habilidades": "SQL, Python, Excel, Power BI, estadística, visualización de datos",
+    "habilidades": "SQL, Python, Excel, Power BI, estadística, visualización de datos, trabajo en equipo",
     "ubicacion": "Ciudad de México",
     "modalidad": "Remoto",
     "sueldo": 25000,
     "tipos": ["Tiempo completo"],
-    "experiencias": "Servicio social en el IIMAS: limpié y analicé una base de 50 mil registros con Python.\n"
-                    "Proyecto escolar: tablero en Power BI con indicadores de ventas.",
-    "educacion": "Licenciatura en Ciencia de Datos, UNAM (2022–2026)",
+    "nombre": "Ana López Hernández", "correo": "ana.lopez@example.com", "telefono": "55 1234 5678",
+    "enlace": "portafolio.example.com/ana",
+    "resumen": "Recién egresada de Ciencia de Datos. Me gusta encontrar patrones en los datos y explicarlos de "
+               "forma sencilla.",
     "descripcion": "Quiero empezar en un equipo de datos donde pueda aprender y trabajar con SQL y Python.",
+    "n_exp": 3,
+    "exp0_puesto": "Vendedora de medio tiempo", "exp0_tipo": "Empleo", "exp0_org": "Tienda departamental",
+    "exp0_periodo": "2022 – 2023", "exp0_logros": "Atendí a clientes en piso de venta.\nCuadré la caja al cierre del turno.",
+    "exp1_puesto": "Apoyo en análisis de datos", "exp1_tipo": "Servicio social", "exp1_org": "IIMAS, UNAM",
+    "exp1_periodo": "ene 2025 – jun 2025",
+    "exp1_logros": "Presenté los resultados al equipo de investigación.\n"
+                   "Limpié y analicé una base de 50 mil registros con Python.\n"
+                   "Automaticé en Excel un reporte semanal que antes se hacía a mano.",
+    "exp2_puesto": "Tablero de indicadores de ventas", "exp2_tipo": "Proyecto", "exp2_org": "Proyecto escolar, UNAM",
+    "exp2_periodo": "2024", "exp2_logros": "Diseñé un tablero en Power BI con indicadores de ventas.\n"
+                                           "Escribí las consultas en SQL que alimentan el tablero.",
+    "n_edu": 1,
+    "edu0_titulo": "Licenciatura en Ciencia de Datos", "edu0_inst": "UNAM", "edu0_periodo": "2022 – 2026",
+    "edu0_detalle": "Promedio 9.1. Materias: estadística, bases de datos y aprendizaje automático.",
+    "idiomas": "Español: nativo\nInglés: intermedio (B2)",
+    "cursos": "Curso de SQL para análisis de datos (en línea, 2024)",
+    "otros": "Voluntariado: asesorías de matemáticas a estudiantes de secundaria (2023)",
 }
 VACIO = {"puesto": "", "nivel": SIN_NIVEL, "habilidades": "", "ubicacion": "", "modalidad": MODALIDADES[0],
-         "sueldo": 0, "tipos": [], "experiencias": "", "educacion": "", "descripcion": ""}
+         "sueldo": 0, "tipos": [], "nombre": "", "correo": "", "telefono": "", "enlace": "", "resumen": "",
+         "descripcion": "", "n_exp": 1, "n_edu": 1, "idiomas": "", "cursos": "", "otros": ""}
+VACIO |= {f"exp{i}_{c}": ("Empleo" if c == "tipo" else "") for i in range(MAX_EXP) for c in CAMPOS_EXP}
+VACIO |= {f"edu{i}_{c}": "" for i in range(MAX_EDU) for c in CAMPOS_EDU}
+EJEMPLO = VACIO | EJEMPLO
 PASOS = {
     1: ("Tu puesto", "Empecemos por lo básico.", ["puesto", "nivel", "habilidades"]),
     2: ("Preferencias", "¿Dónde y cómo quieres trabajar?", ["ubicacion", "modalidad", "sueldo", "tipos"]),
-    3: ("Para tu CV", "Cuéntanos de ti. Esto no cambia el ranking: se usa para armar tu CV.",
-        ["experiencias", "educacion", "descripcion"]),
+    3: ("Sobre ti", "Desde aquí todo es para tu CV y es opcional: no cambia el ranking.",
+        ["nombre", "correo", "telefono", "enlace", "resumen", "descripcion"]),
+    4: ("Tu experiencia", "Empleos, prácticas, servicio social, proyectos escolares o voluntariado. Cuenta qué hiciste "
+                          "y qué lograste, con cifras si las tienes.", []),
+    5: ("Educación y más", "Lo último: estudios, idiomas y cursos.", ["idiomas", "cursos", "otros"]),
 }
+
+
+def campos(paso: int) -> list[str]:
+    """Campos visibles del paso (las experiencias y los estudios cambian según cuántos agregó el usuario)."""
+    if paso == 4:
+        return [f"exp{i}_{c}" for i in range(ss.datos["n_exp"]) for c in CAMPOS_EXP]
+    if paso == 5:
+        return [f"edu{i}_{c}" for i in range(ss.datos["n_edu"]) for c in CAMPOS_EDU] + PASOS[5][2]
+    return PASOS[paso][2]
 
 
 @st.cache_resource(show_spinner="Cargando el motor: modelo e5 e índice de 110,928 vacantes…")
@@ -147,13 +199,14 @@ def textos(ids: tuple[int, ...]) -> dict[int, str]:
 
 # ---------------- estado ----------------
 for k, v in {"gustan": [], "no_gustan": [], "lugares_previos": {}, "ultimo_descarte": None, "paso": 1, "datos": dict(VACIO),
-             "editando": True, "vivo_res": None, "vivas": None, "vec_vivas": {}}.items():
+             "editando": True, "vivo_res": None, "vivas": None, "vec_vivas": {}, "cv_para": None, "cv_bases": {},
+             "cv_notas": {}, "cv_mia": {}}.items():
     ss.setdefault(k, v)
 
 
 def guardar_paso():
     """Copia los campos visibles a `datos` (Streamlit borra el estado de los campos que dejan de mostrarse)."""
-    for campo in PASOS[ss.paso][2]:
+    for campo in campos(ss.paso):
         if f"w_{campo}" in ss:
             ss.datos[campo] = ss[f"w_{campo}"]
 
@@ -169,14 +222,33 @@ def ir_a(paso: int):
 
 
 def cargar_paso(paso: int):
-    for campo in PASOS[paso][2]:
+    for campo in campos(paso):
         ss[f"w_{campo}"] = ss.datos[campo]
+
+
+def agregar(grupo: str):
+    """Agrega una experiencia ("exp") o un estudio ("edu") al paso actual."""
+    guardar_paso()
+    ss.datos[f"n_{grupo}"] += 1
+    cargar_paso(ss.paso)
+
+
+def quitar(grupo: str, i: int):
+    """Quita la entrada i y recorre las siguientes; si es la única, solo la vacía."""
+    guardar_paso()
+    cs, n = (CAMPOS_EXP, ss.datos["n_exp"]) if grupo == "exp" else (CAMPOS_EDU, ss.datos["n_edu"])
+    for j in range(i, n - 1):
+        for c in cs:
+            ss.datos[f"{grupo}{j}_{c}"] = ss.datos[f"{grupo}{j + 1}_{c}"]
+    for c in cs:
+        ss.datos[f"{grupo}{n - 1}_{c}"] = VACIO[f"{grupo}{n - 1}_{c}"]
+    ss.datos[f"n_{grupo}"] = max(1, n - 1)
+    cargar_paso(ss.paso)
 
 
 def llenar_ejemplo():
     ss.datos = dict(EJEMPLO)
-    for campo, valor in EJEMPLO.items():
-        ss[f"w_{campo}"] = valor
+    cargar_paso(ss.paso)
 
 
 def calificar(idx: int, gusta: bool):
@@ -215,16 +287,34 @@ def buscar():
     perfil = Perfil(
         puesto=d["puesto"], habilidades=[h.strip() for h in d["habilidades"].split(",") if h.strip()],
         nivel=None if d["nivel"] == SIN_NIVEL else d["nivel"], ubicacion=d["ubicacion"], modalidad=d["modalidad"],
-        sueldo_mxn_mensual=float(d["sueldo"]) or None, tipos_empleo=d["tipos"],
-        experiencias=d["experiencias"], educacion=d["educacion"], descripcion=d["descripcion"])
+        sueldo_mxn_mensual=float(d["sueldo"]) or None, tipos_empleo=d["tipos"])
     consulta, traducido = consulta_en(perfil)
     ss.q0 = motor().vector(consulta)
     ss.mi_perfil, ss.consulta, ss.traducido = perfil, consulta, traducido
     reiniciar_calificaciones()
     ss.lugares_actuales, ss.editando = {}, False
     ss.vivo_res, ss.vivas, ss.vec_vivas = None, None, {}
+    ss.cv_para, ss.cv_bases, ss.cv_notas, ss.cv_mia = None, {}, {}, {}
+    for k in [k for k in ss if str(k).startswith("cv_t_")]:  # textos editados del CV de la búsqueda anterior
+        del ss[k]
     if ss.get("incluir_vivo", True):
         cargar_vivas()
+
+
+def datos_cv() -> cv.DatosCV:
+    """Lo que escribió el usuario, ya separado por entradas, para armar el CV."""
+    d = ss.datos
+    exps = [cv.Experiencia(d[f"exp{i}_puesto"].strip(), d[f"exp{i}_org"].strip(), d[f"exp{i}_periodo"].strip(),
+                           d[f"exp{i}_tipo"], cv.lineas(d[f"exp{i}_logros"])) for i in range(d["n_exp"])]
+    edus = [cv.Estudio(d[f"edu{i}_titulo"].strip(), d[f"edu{i}_inst"].strip(), d[f"edu{i}_periodo"].strip(),
+                       d[f"edu{i}_detalle"].strip()) for i in range(d["n_edu"])]
+    return cv.DatosCV(
+        nombre=d["nombre"], puesto=d["puesto"].strip(), correo=d["correo"], telefono=d["telefono"],
+        ciudad=d["ubicacion"].strip(), enlace=d["enlace"], resumen=d["resumen"], objetivo=d["descripcion"],
+        habilidades=[h.strip() for h in d["habilidades"].split(",") if h.strip()],
+        experiencias=[e for e in exps if e.puesto or e.organizacion or e.logros],
+        estudios=[e for e in edus if e.titulo or e.institucion], idiomas=cv.lineas(d["idiomas"]),
+        cursos=cv.lineas(d["cursos"]), otros=cv.lineas(d["otros"]))
 
 
 def cargar_vivas(forzar: bool = False):
@@ -306,8 +396,8 @@ st.html('<p class="pc-marca">Primera chamba</p>'
 # ---------------- formulario por pasos ----------------
 if ss.editando or "q0" not in ss:
     paso = ss.paso
-    titulo, desc, campos = PASOS[paso]
-    for campo in campos:  # restaura lo escrito antes de volver a este paso
+    titulo, desc, _ = PASOS[paso]
+    for campo in campos(paso):  # restaura lo escrito antes de volver a este paso
         ss.setdefault(f"w_{campo}", ss.datos[campo])
     with st.container(key="asistente"):
         st.html(f'<div class="pc-avance"><div style="width:{100 * paso / len(PASOS):.0f}%"></div></div>'
@@ -329,12 +419,59 @@ if ss.editando or "q0" not in ss:
             st.number_input("Sueldo mensual esperado (MXN)", min_value=0, step=1000, key="w_sueldo",
                             icon=":material/payments:", help="0 = sin preferencia")
             st.multiselect("Tipo de empleo", list(TIPOS), key="w_tipos", placeholder="Todos")
-        else:
-            st.text_area("Experiencias y logros", key="w_experiencias", height=110,
-                         placeholder="Servicio social, proyectos, trabajos… con cifras si las tienes.")
+        elif paso == 3:
+            st.text_input("Nombre completo", key="w_nombre", placeholder="Como quieres que aparezca en tu CV",
+                          icon=":material/person:")
             c1, c2 = st.columns(2)
-            c1.text_area("Educación", key="w_educacion", height=90, placeholder="Licenciatura en…")
-            c2.text_area("Tu empleo ideal", key="w_descripcion", height=90, placeholder="Algo breve sobre ti…")
+            c1.text_input("Correo", key="w_correo", placeholder="nombre@correo.com", icon=":material/mail:")
+            c2.text_input("Teléfono", key="w_telefono", placeholder="55 1234 5678", icon=":material/call:")
+            st.text_input("LinkedIn, portafolio o GitHub", key="w_enlace", placeholder="linkedin.com/in/…",
+                          icon=":material/link:")
+            st.text_area("Preséntate en dos o tres frases", key="w_resumen", height=80,
+                         placeholder="Qué estudiaste o a qué te dedicas y qué se te da bien.")
+            st.text_area("Tu empleo ideal", key="w_descripcion", height=80,
+                         placeholder="Qué tipo de trabajo buscas y qué quieres aprender.")
+        elif paso == 4:
+            n = ss.datos["n_exp"]
+            for i in range(n):
+                with st.container(key=f"exp_{i}"):
+                    c1, c2 = st.columns([3, 2])
+                    c1.text_input("Puesto o nombre del proyecto", key=f"w_exp{i}_puesto",
+                                  placeholder="Practicante de análisis de datos")
+                    c2.selectbox("Tipo", cv.TIPOS_EXPERIENCIA, key=f"w_exp{i}_tipo")
+                    c1, c2 = st.columns([3, 2])
+                    c1.text_input("Empresa, escuela u organización", key=f"w_exp{i}_org", placeholder="IIMAS, UNAM")
+                    c2.text_input("Periodo", key=f"w_exp{i}_periodo", placeholder="ene 2025 – jun 2025")
+                    st.text_area("Qué hiciste y qué lograste (uno por línea)", key=f"w_exp{i}_logros", height=96,
+                                 placeholder="Limpié y analicé una base de 50 mil registros con Python.\n"
+                                             "Presenté los resultados al equipo.")
+                    st.button("Quitar esta experiencia", key=f"quitar_exp{i}", type="tertiary",
+                              icon=":material/delete:", on_click=quitar, args=("exp", i))
+            if n < MAX_EXP:
+                st.button("Agregar otra experiencia", type="tertiary", icon=":material/add:", on_click=agregar,
+                          args=("exp",))
+        else:
+            n = ss.datos["n_edu"]
+            for i in range(n):
+                with st.container(key=f"edu_{i}"):
+                    c1, c2 = st.columns([3, 2])
+                    c1.text_input("Carrera, bachillerato o certificado", key=f"w_edu{i}_titulo",
+                                  placeholder="Licenciatura en Ciencia de Datos")
+                    c2.text_input("Periodo", key=f"w_edu{i}_periodo", placeholder="2022 – 2026")
+                    st.text_input("Escuela", key=f"w_edu{i}_inst", placeholder="UNAM")
+                    st.text_input("Detalle (opcional)", key=f"w_edu{i}_detalle",
+                                  placeholder="Promedio, materias relevantes, tesis, reconocimientos…")
+                    if n > 1:
+                        st.button("Quitar estos estudios", key=f"quitar_edu{i}", type="tertiary",
+                                  icon=":material/delete:", on_click=quitar, args=("edu", i))
+            if n < MAX_EDU:
+                st.button("Agregar otros estudios", type="tertiary", icon=":material/add:", on_click=agregar,
+                          args=("edu",))
+            c1, c2 = st.columns(2)
+            c1.text_area("Idiomas (uno por línea)", key="w_idiomas", height=90, placeholder="Inglés: intermedio (B2)")
+            c2.text_area("Cursos y certificaciones (uno por línea)", key="w_cursos", height=90,
+                         placeholder="Curso de SQL (en línea, 2024)")
+            st.text_area("Otros: voluntariado, premios, actividades (uno por línea)", key="w_otros", height=70)
         if ss.get("error_paso"):
             st.error(ss.error_paso, icon=":material/error:")
 
@@ -395,6 +532,163 @@ def resumen(desglose, etiqueta: str, lugar: int, en_lista: bool = True, viva: bo
         frases.append("Aparece en tu lista porque cumple con lo que pediste.")
     return f"**En resumen:** {' '.join(frases)}"
 
+
+# ---------------- CV para una vacante ----------------
+def abrir_cv(idx):
+    ss.cv_para = idx
+
+
+def cerrar_cv():
+    ss.cv_para = None
+
+
+def clave_cv(jid, campo: str) -> str:
+    return f"cv_t_{jid}_{campo}"
+
+
+def texto_y_vector(idx) -> tuple[str, object]:
+    """Descripción completa y vector de la vacante (catálogo o en vivo) para ordenar el CV y buscar habilidades."""
+    m = motor()
+    if isinstance(idx, str):
+        f = ss.vivas[ss.vivas["idx"] == idx].iloc[0]
+        return f"{f['title']}. {f['descripcion']}", ss.vec_vivas[idx]
+    jid = int(m.cat["job_id"].iloc[idx])
+    return f"{m.cat['title'].iloc[idx]}. {textos((jid,)).get(jid, '')}", m.E[idx]
+
+
+def textos_cv(jid) -> tuple[dict[str, str], dict[str, str]]:
+    enc = {k: ss.get(clave_cv(jid, k), "") for k in ("nombre", "titular", "contacto")}
+    return enc, {k: ss.get(clave_cv(jid, k), "") for k in cv.SECCIONES}
+
+
+def restablecer_cv(jid):
+    base = ss.cv_bases[jid]
+    for k, t in (base.encabezado | base.secciones).items():
+        ss[clave_cv(jid, k)] = t
+    ss.cv_mia.pop(jid, None)
+    ss.cv_notas[jid] = "Volvimos al CV armado automáticamente."
+
+
+def pulir(jid):
+    _, sec = textos_cv(jid)
+    tuyo = datos_cv().todo_el_texto() + "\n" + "\n".join(sec.values())  # lo editado también es del usuario
+    with st.spinner("La IA está mejorando la redacción…"):
+        nueva, nota = cv.pulir_con_gemini(sec, tuyo)
+    ss.cv_notas[jid] = nota
+    if nueva:
+        ss.cv_mia[jid] = {k: sec[k] for k in nueva}
+        for k, t in nueva.items():
+            ss[clave_cv(jid, k)] = t
+
+
+def volver_a_mi_version(jid):
+    for k, t in ss.cv_mia.pop(jid, {}).items():
+        ss[clave_cv(jid, k)] = t
+    ss.cv_notas[jid] = "Volvimos a tu versión."
+
+
+def insignias(nombres: list[str], color: str, icono: str) -> str:
+    return " ".join(f":{color}-badge[{icono} {n}]" for n in nombres)
+
+
+AYUDA_CV = {
+    "experiencia": "Cada experiencia: una línea «Puesto · Organización · Periodo» y debajo sus logros, cada uno con "
+                   "«- ». Deja una línea en blanco entre experiencias.",
+    "educacion": "Cada estudio: una línea «Carrera · Escuela · Periodo» y, si quieres, un detalle con «- ».",
+}
+ALTURA_CV = {"perfil": 136, "experiencia": 330, "educacion": 110, "habilidades": 76, "idiomas": 68, "cursos": 90,
+             "otros": 76}
+
+if "q0" in ss and not ss.editando and ss.get("cv_para") is not None:
+    idx = ss.cv_para
+    if isinstance(idx, str) and (ss.vivas is None or not ss.vivas["idx"].eq(idx).any()):
+        ss.cv_para = None  # la vacante en vivo ya no está (p. ej., se volvió a consultar la API)
+        st.rerun()
+    jid = jid_de(idx)
+    titulo, empresa, ubic = ficha(idx)
+    if jid not in ss.cv_bases:
+        with st.spinner("Armando tu CV para esta vacante…"):
+            texto, vec = texto_y_vector(idx)
+            ss.cv_bases[jid] = cv.armar(datos_cv(), vec, texto, motor().vectores)
+    base = ss.cv_bases[jid]
+    for k, t in (base.encabezado | base.secciones).items():
+        ss.setdefault(clave_cv(jid, k), t)
+
+    with st.container(key="cvcab"):
+        c1, c2 = st.columns([3, 2], vertical_alignment="center")
+        c1.html(f'<p class="pc-cv-l">Tu CV para</p><p class="pc-cv-t">{escape(titulo)}</p>'
+                f'<p class="pc-cv-m">{escape(empresa)} · {escape(str(ubic))}</p>')
+        with c2.container(horizontal=True, horizontal_alignment="right"):
+            st.button("Editar", icon=":material/edit:", on_click=editar_perfil, help="Cambiar lo que escribiste")
+            st.button("Volver", icon=":material/arrow_back:", on_click=cerrar_cv, help="Volver a las vacantes")
+
+    st.html('<p class="pc-seccion">Lo que pide esta vacante</p>')
+    h = base.habilidades
+    if not any(h.values()):
+        st.caption("El anuncio no menciona ninguna de las habilidades que sabemos reconocer, así que no hay nada que "
+                   "comparar.")
+    if h["tienes"]:
+        st.markdown("**Las tienes y van en tu CV:** " + insignias(h["tienes"], "green", ":material/check:"))
+    if h["en_tu_texto"]:
+        st.markdown("**Las mencionas en tu experiencia o tus estudios:** "
+                    + insignias(h["en_tu_texto"], "blue", ":material/info:"))
+        st.caption("Ya aparecen donde las escribiste. Si las dominas, agrégalas a tus habilidades en «Editar».")
+    if h["faltan"]:
+        faltan = sorted(h["faltan"], key=lambda n: hab.tipo_de(n) != hab.TECNICA)
+        st.markdown("**No están en tu perfil:** " + insignias(faltan, "orange", ":material/close:"))
+        st.caption("No las pusimos en tu CV porque no las escribiste. Si sí las tienes, agrégalas en «Editar»; si "
+                   "no, pueden ser lo siguiente que aprendas.")
+
+    st.html('<p class="pc-seccion">Tu CV</p>')
+    st.caption("Lo armamos solo con lo que escribiste, ordenado según lo que pide la vacante. Cámbialo como quieras "
+               "antes de descargarlo; si dejas una sección vacía, no sale en el PDF.")
+    with st.container(key="cveditor"):
+        c1, c2 = st.columns(2)
+        c1.text_input("Nombre", key=clave_cv(jid, "nombre"), persist_state="page")
+        c2.text_input("Titular", key=clave_cv(jid, "titular"), persist_state="page", help="Va debajo de tu nombre.")
+        st.text_input("Contacto", key=clave_cv(jid, "contacto"), persist_state="page")
+        for sec, titulo_sec in cv.SECCIONES.items():
+            st.text_area(titulo_sec, key=clave_cv(jid, sec), height=ALTURA_CV[sec], persist_state="page",
+                         help=AYUDA_CV.get(sec))
+
+    if config.hay_gemini():
+        with st.container(horizontal=True, vertical_alignment="center"):
+            st.button("Mejorar la redacción con IA", icon=":material/auto_fix_high:", on_click=pulir, args=(jid,))
+            if jid in ss.cv_mia:
+                st.button("Volver a mi versión", type="tertiary", icon=":material/undo:", on_click=volver_a_mi_version,
+                          args=(jid,))
+        st.caption("Opcional. Solo mandamos a Gemini (Google) tu perfil y tu experiencia, sin tu nombre ni tu "
+                   "contacto. En el nivel gratuito, Google puede usar estos datos para mejorar sus productos. Si la "
+                   "IA agrega cifras o habilidades que no escribiste, descartamos su versión.")
+    if ss.cv_notas.get(jid):
+        st.caption(ss.cv_notas[jid])
+
+    enc, sec = textos_cv(jid)
+    archivo = "_".join(re.findall(r"\w+", f"CV {enc['nombre'] or ''} {empresa}"))[:70] + ".pdf"
+    with st.container(horizontal=True, vertical_alignment="center"):
+        st.download_button("Descargar PDF", cv.pdf(enc, sec), file_name=archivo, mime="application/pdf",
+                           type="primary", icon=":material/download:", on_click="ignore")
+        st.space("stretch")
+        st.button("Restablecer", type="tertiary", icon=":material/restart_alt:", on_click=restablecer_cv, args=(jid,),
+                  help="Vuelve al CV armado automáticamente. Pierdes los cambios que hiciste aquí.")
+
+    with st.expander("¿Cómo armamos tu CV?", icon=":material/help_outline:"):
+        st.markdown(
+            "1. **Solo usamos lo que escribiste.** No agregamos habilidades, cifras ni experiencias.\n"
+            "2. **Ordenamos según la vacante.** Comparamos cada experiencia, logro, habilidad y curso con el anuncio "
+            "usando el mismo modelo de lenguaje que el ranking, y ponemos primero lo que más se parece. En "
+            "habilidades, primero van las que el anuncio menciona.\n"
+            f"3. **Recortamos si sobra.** Hasta {cv.MAX_LOGROS} logros por experiencia, {cv.MAX_HABILIDADES} "
+            f"habilidades y {cv.MAX_CURSOS} cursos. "
+            + ("Lo demás queda fuera, pero te lo mostramos aquí abajo." if base.omitidos else
+               "Esta vez no quedó nada fuera."))
+        if base.orden_experiencias:
+            st.markdown("**Orden de tu experiencia para esta vacante:** "
+                        + " → ".join(escape(n) for n, _ in base.orden_experiencias))
+        if base.omitidos:
+            st.markdown("**Lo que dejamos fuera:**\n" + "\n".join(f"- {escape(o)}" for o in base.omitidos))
+            st.caption("Si quieres alguno, cópialo a la sección que corresponde.")
+    st.stop()
 
 if "q0" in ss and not ss.editando:
     m, perfil = motor(), ss.mi_perfil
@@ -512,6 +806,8 @@ if "q0" in ss and not ss.editando:
                 if isinstance(f["job_posting_url"], str) and f["job_posting_url"]:
                     st.link_button("Ver anuncio", f["job_posting_url"], type="tertiary",
                                    icon=":material/open_in_new:", icon_position="right")
+                st.button("Armar mi CV", key=f"armar_{jid}", type="tertiary", icon=":material/description:",
+                          on_click=abrir_cv, args=(idx,), help="Un CV con lo que escribiste, ordenado para esta vacante")
                 st.space("stretch")
                 st.button("Te interesa" if interesa else "Me interesa", key=f"si_{jid}",
                           type="primary" if interesa else "secondary",

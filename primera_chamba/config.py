@@ -17,6 +17,7 @@ CACHE = RAIZ / "cache"
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 JSEARCH_API_KEY = os.getenv("JSEARCH_API_KEY", "").strip()
+GEMINI_MODELO = os.getenv("GEMINI_MODELO", "gemini-3.8-flash").strip()
 ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID", "").strip()
 ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "").strip()
 
