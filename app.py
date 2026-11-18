@@ -378,7 +378,7 @@ with st.sidebar:
         c = en_vivo.cuota()
         st.caption(f"Consultas a las APIs registradas: {c['total']}. JSearch: "
                    f"{'quedan ' + str(c['JSearch']) + ' de 200 este mes' if c['JSearch'] is not None else 'sin dato de cuota aún'}"
-                   f"; Adzuna: {c['Adzuna']} este mes.")
+                   f"; Adzuna: {c['Adzuna']} este mes; Gemini: {c['Gemini']} hoy.")
         st.checkbox("Simular que la API no responde", key="simular_caida", on_change=cargar_vivas,
                     help="Prueba del respaldo: se muestran las vacantes en vivo guardadas la última vez.")
         if "mi_perfil" in ss and ss.get("incluir_vivo", True):

@@ -89,6 +89,9 @@
   longer available to new users"); `gemini-3.8-flash` → 5xx (29 s) y después 503 "high demand"; `gemini-flash-latest` →
   503. La clave sirve (no hubo 401/403). Modelo por defecto: `gemini-3.8-flash` (variable `GEMINI_MODELO`). En todas las
   fallas salió el CV por reglas con la nota discreta. Reintentar antes de la demo, con OK del usuario.
+- [x] Las llamadas reales a Gemini se anotan en `cache/en_vivo/llamadas.jsonl` (fuente "Gemini", solo estado) y se cuentan
+  por día en "Detalle técnico". `PC_SIN_RED=1` también bloquea Gemini. Las 5 llamadas del 2026-11-18 son anteriores a
+  la bitácora y no aparecen en ella.
 
 ## Decisiones
 - Claves en `.env` vía python-dotenv; en la nube, la variable de entorno tiene prioridad.

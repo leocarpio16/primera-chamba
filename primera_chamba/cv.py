@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
-from primera_chamba import config
+from primera_chamba import config, en_vivo
 from primera_chamba import habilidades as hab
 
 MAX_LOGROS = 4        # logros por experiencia
@@ -216,10 +216,13 @@ def pulir_con_gemini(secciones: dict[str, str], texto_usuario: str, cliente=None
     original = {"perfil": secciones.get("perfil", ""), "experiencia": secciones.get("experiencia", "")}
     if not (original["perfil"].strip() or original["experiencia"].strip()):
         return None, "No hay perfil ni experiencia que redactar."
+    real = cliente is None  # las pruebas pasan un cliente simulado; solo las llamadas reales van a la bitácora
     try:
-        if cliente is None:
+        if real:
             if not config.hay_gemini():
                 return None, "No hay clave de Gemini configurada."
+            if en_vivo.SIN_RED:
+                return None, "Sin conexión a la IA en modo de prueba (PC_SIN_RED); dejamos tu versión."
             from google import genai
             from google.genai import types
             cliente = genai.Client(api_key=config.GEMINI_API_KEY, http_options=types.HttpOptions(timeout=30_000))
@@ -228,9 +231,13 @@ def pulir_con_gemini(secciones: dict[str, str], texto_usuario: str, cliente=None
             model=MODELO_GEMINI, contents=json.dumps(original, ensure_ascii=False),
             config=types.GenerateContentConfig(system_instruction=INSTRUCCION, temperature=0.2,
                                                response_mime_type="application/json"))
+        if real:
+            en_vivo._registrar("Gemini", "200")
         nueva = json.loads(r.text)
     except Exception as e:  # sin str(e)
         codigo = getattr(e, "code", None)
+        if real and not isinstance(e, json.JSONDecodeError):
+            en_vivo._registrar("Gemini", str(codigo or type(e).__name__))
         if codigo in (429, 503):  # cuota agotada o "alta demanda" (503 visto el 2026-11-18)
             return None, f"La IA está saturada en este momento (código {codigo}); dejamos tu versión. Prueba más tarde."
         return None, f"La IA no respondió ({type(e).__name__}{f', código {codigo}' if codigo else ''}); dejamos tu versión."

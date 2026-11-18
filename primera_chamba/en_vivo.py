@@ -78,13 +78,16 @@ def _registrar(fuente: str, estado: str, restantes: int | None = None) -> None:
 
 
 def cuota() -> dict:
-    """{'JSearch': restantes según la API o None, 'Adzuna': llamadas hechas este mes, 'total': llamadas registradas}."""
+    """{'JSearch': restantes según la API o None, 'Adzuna': llamadas hechas este mes, 'Gemini': llamadas de hoy (el
+    nivel gratuito limita por día), 'total': llamadas registradas}."""
     ruta = DIR / "llamadas.jsonl"
     filas = [json.loads(x) for x in ruta.read_text().splitlines()] if ruta.exists() else []
     mes = datetime.now().strftime("%Y-%m")
     js = [f["restantes"] for f in filas if f["fuente"] == "JSearch" and f["restantes"] is not None]
     return {"JSearch": js[-1] if js else None,
             "Adzuna": sum(f["fuente"] == "Adzuna" and f["cuando"].startswith(mes) for f in filas),
+            "Gemini": sum(f["fuente"] == "Gemini" and f["cuando"].startswith(datetime.now().strftime("%Y-%m-%d"))
+                          for f in filas),
             "total": len(filas)}
 
 
