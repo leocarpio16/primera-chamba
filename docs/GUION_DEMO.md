@@ -15,7 +15,7 @@ Presentación: https://claude.ai/artifact/CXHAyrNFEFwyG22H2hS4oz (privada: compa
 
 | # | Acción | Qué decir | Tiempo |
 |---|---|---|---|
-| 1 | Paso 1 → **Usar un perfil de ejemplo** | «Una recién egresada de Ciencia de Datos busca su primer trabajo como analista de datos.» | 20 s |
+| 1 | Paso 1 → **Usar un perfil de ejemplo** (sin elegir área: así carga el de Analista de datos) | «Una recién egresada de Ciencia de Datos busca su primer trabajo como analista de datos.» | 20 s |
 | 2 | **Continuar** por los pasos 2 a 5 sin detenerse mucho | «Preferencias para el ranking; del paso 3 en adelante, todo es para el CV. Fíjense: tiene un empleo de vendedora que no tiene que ver con datos.» | 40 s |
 | 3 | **Buscar vacantes** (≈12–15 s) | Mientras carga: «Traduce el perfil al inglés, lo convierte en vector con e5 y lo compara contra 110,928 vacantes.» | 15 s |
 | 4 | Vacante #1: insignias y **¿Por qué te la recomendamos?** | «No muestra números técnicos: coincidencia muy alta y qué preferencias cumple.» | 40 s |

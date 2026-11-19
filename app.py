@@ -10,6 +10,7 @@ from html import escape
 import streamlit as st
 
 from primera_chamba import config, cv, en_vivo
+from primera_chamba import encuesta
 from primera_chamba import habilidades as hab
 from primera_chamba.motor import (BONO, CANDIDATOS, LUGAR_MAX_VIVAS, MODALIDADES, NIVEL_ES, NIVELES, TIPO_ES, TIPOS,
                                   Motor, Perfil, coincidencia, consulta_en, descripciones)
@@ -130,50 +131,22 @@ ESTILOS = """
 MAX_EXP, MAX_EDU = 4, 3
 CAMPOS_EXP = ["puesto", "tipo", "org", "periodo", "logros"]
 CAMPOS_EDU = ["titulo", "inst", "periodo", "detalle"]
-EJEMPLO = {
-    "puesto": "Analista de datos",
-    "nivel": "Sin experiencia / recién egresado",
-    "habilidades": "SQL, Python, Excel, Power BI, estadística, visualización de datos, trabajo en equipo",
-    "ubicacion": "Ciudad de México",
-    "modalidad": "Remoto",
-    "sueldo": 25000,
-    "tipos": ["Tiempo completo"],
-    "nombre": "Ana López Hernández", "correo": "ana.lopez@example.com", "telefono": "55 1234 5678",
-    "enlace": "portafolio.example.com/ana",
-    "resumen": "Recién egresada de Ciencia de Datos. Me gusta encontrar patrones en los datos y explicarlos de "
-               "forma sencilla.",
-    "descripcion": "Quiero empezar en un equipo de datos donde pueda aprender y trabajar con SQL y Python.",
-    "n_exp": 3,
-    "exp0_puesto": "Vendedora de medio tiempo", "exp0_tipo": "Empleo", "exp0_org": "Tienda departamental",
-    "exp0_periodo": "2022 – 2023", "exp0_logros": "Atendí a clientes en piso de venta.\nCuadré la caja al cierre del turno.",
-    "exp1_puesto": "Apoyo en análisis de datos", "exp1_tipo": "Servicio social", "exp1_org": "IIMAS, UNAM",
-    "exp1_periodo": "ene 2025 – jun 2025",
-    "exp1_logros": "Presenté los resultados al equipo de investigación.\n"
-                   "Limpié y analicé una base de 50 mil registros con Python.\n"
-                   "Automaticé en Excel un reporte semanal que antes se hacía a mano.",
-    "exp2_puesto": "Tablero de indicadores de ventas", "exp2_tipo": "Proyecto", "exp2_org": "Proyecto escolar, UNAM",
-    "exp2_periodo": "2024", "exp2_logros": "Diseñé un tablero en Power BI con indicadores de ventas.\n"
-                                           "Escribí las consultas en SQL que alimentan el tablero.",
-    "n_edu": 1,
-    "edu0_titulo": "Licenciatura en Ciencia de Datos", "edu0_inst": "UNAM", "edu0_periodo": "2022 – 2026",
-    "edu0_detalle": "Promedio 9.1. Materias: estadística, bases de datos y aprendizaje automático.",
-    "idiomas": "Español: nativo\nInglés: intermedio (B2)",
-    "cursos": "Curso de SQL para análisis de datos (en línea, 2024)",
-    "otros": "Voluntariado: asesorías de matemáticas a estudiantes de secundaria (2023)",
-}
-VACIO = {"puesto": "", "nivel": SIN_NIVEL, "habilidades": "", "ubicacion": "", "modalidad": MODALIDADES[0],
-         "sueldo": 0, "tipos": [], "nombre": "", "correo": "", "telefono": "", "enlace": "", "resumen": "",
-         "descripcion": "", "n_exp": 1, "n_edu": 1, "idiomas": "", "cursos": "", "otros": ""}
+VACIO = {"area": encuesta.SIN_AREA, "puesto": "", "nivel": SIN_NIVEL, "habilidades": "", "ubicacion": "",
+         "modalidad": MODALIDADES[0], "sueldo": 0, "tipos": [], "nombre": "", "correo": "", "telefono": "",
+         "enlace": "", "resumen": "", "descripcion": "", "n_exp": 1, "n_edu": 1, "idiomas": "", "cursos": "",
+         "otros": ""}
 VACIO |= {f"exp{i}_{c}": ("Empleo" if c == "tipo" else "") for i in range(MAX_EXP) for c in CAMPOS_EXP}
 VACIO |= {f"edu{i}_{c}": "" for i in range(MAX_EDU) for c in CAMPOS_EDU}
-EJEMPLO = VACIO | EJEMPLO
+# Perfiles de ejemplo por área; sin área elegida se usa el de la demo (Analista de datos).
+EJEMPLOS = {area: VACIO | e for area, e in encuesta.EJEMPLOS.items()}
+EJEMPLO = VACIO | encuesta.EJEMPLO_DEMO
 PASOS = {
-    1: ("Tu puesto", "Empecemos por lo básico.", ["puesto", "nivel", "habilidades"]),
+    1: ("Tu puesto", "Empecemos por lo básico.", ["area", "puesto", "nivel", "habilidades"]),
     2: ("Preferencias", "¿Dónde y cómo quieres trabajar?", ["ubicacion", "modalidad", "sueldo", "tipos"]),
     3: ("Sobre ti", "Desde aquí todo es para tu CV y es opcional: no cambia el ranking.",
         ["nombre", "correo", "telefono", "enlace", "resumen", "descripcion"]),
-    4: ("Tu experiencia", "Empleos, prácticas, servicio social, proyectos escolares o voluntariado. Cuenta qué hiciste "
-                          "y qué lograste, con cifras si las tienes.", []),
+    4: ("Tu experiencia", "Empleos, prácticas, servicio social, trabajos por tu cuenta, proyectos escolares o "
+                          "voluntariado. Cuenta qué hiciste y qué lograste, con cifras si las tienes.", []),
     5: ("Educación y más", "Lo último: estudios, idiomas y cursos.", ["idiomas", "cursos", "otros"]),
 }
 
@@ -247,8 +220,15 @@ def quitar(grupo: str, i: int):
 
 
 def llenar_ejemplo():
-    ss.datos = dict(EJEMPLO)
+    """Perfil de ejemplo del área elegida en el paso 1; sin área, el de la demo."""
+    area = ss.get("w_area", ss.datos["area"])
+    ss.datos = dict(EJEMPLOS.get(area, EJEMPLO))
     cargar_paso(ss.paso)
+
+
+def pista(campo: str) -> str:
+    """Ejemplo de texto de un campo según el área (en el paso 1 se lee del selector, que aún no se guarda)."""
+    return encuesta.pista(ss.get("w_area") if ss.paso == 1 else ss.datos["area"], campo)
 
 
 def calificar(idx: int, gusta: bool):
@@ -404,11 +384,15 @@ if ss.editando or "q0" not in ss:
                 f'<div class="pc-paso">Paso {paso} de {len(PASOS)}</div>'
                 f'<p class="pc-titulo">{titulo}</p><p class="pc-desc">{desc}</p>')
         if paso == 1:
-            st.text_input("Puesto que buscas", key="w_puesto", placeholder="Analista de datos", icon=":material/work:")
+            st.selectbox("Tu área", encuesta.AREAS, key="w_area", icon=":material/school:",
+                         help="Sirve para darte ejemplos de tu área al llenar la encuesta. No cambia la búsqueda.")
+            st.text_input("Puesto que buscas", key="w_puesto", placeholder=pista("puesto"), icon=":material/work:")
             st.selectbox("Nivel de experiencia", [SIN_NIVEL, *NIVELES], key="w_nivel",
                          icon=":material/signal_cellular_alt:")
             st.text_area("Habilidades, separadas por comas", key="w_habilidades", height=96,
-                         placeholder="SQL, Python, Excel, atención a clientes…")
+                         placeholder=pista("habilidades"),
+                         help="Lo que sabes hacer: conocimientos de tu carrera, programas o herramientas que usas y "
+                              "habilidades para tratar con personas.")
         elif paso == 2:
             st.text_input("Ubicación", key="w_ubicacion", placeholder="Ej. Ciudad de México o Austin, Texas",
                           icon=":material/location_on:")
@@ -425,7 +409,7 @@ if ss.editando or "q0" not in ss:
             c1, c2 = st.columns(2)
             c1.text_input("Correo", key="w_correo", placeholder="nombre@correo.com", icon=":material/mail:")
             c2.text_input("Teléfono", key="w_telefono", placeholder="55 1234 5678", icon=":material/call:")
-            st.text_input("LinkedIn, portafolio o GitHub", key="w_enlace", placeholder="linkedin.com/in/…",
+            st.text_input("LinkedIn, portafolio o sitio web", key="w_enlace", placeholder="linkedin.com/in/…",
                           icon=":material/link:")
             st.text_area("Preséntate en dos o tres frases", key="w_resumen", height=80,
                          placeholder="Qué estudiaste o a qué te dedicas y qué se te da bien.")
@@ -437,14 +421,13 @@ if ss.editando or "q0" not in ss:
                 with st.container(key=f"exp_{i}"):
                     c1, c2 = st.columns([3, 2])
                     c1.text_input("Puesto o nombre del proyecto", key=f"w_exp{i}_puesto",
-                                  placeholder="Practicante de análisis de datos")
+                                  placeholder=pista("exp_puesto"))
                     c2.selectbox("Tipo", cv.TIPOS_EXPERIENCIA, key=f"w_exp{i}_tipo")
                     c1, c2 = st.columns([3, 2])
-                    c1.text_input("Empresa, escuela u organización", key=f"w_exp{i}_org", placeholder="IIMAS, UNAM")
+                    c1.text_input("Empresa, escuela u organización", key=f"w_exp{i}_org", placeholder=pista("exp_org"))
                     c2.text_input("Periodo", key=f"w_exp{i}_periodo", placeholder="ene 2025 – jun 2025")
                     st.text_area("Qué hiciste y qué lograste (uno por línea)", key=f"w_exp{i}_logros", height=96,
-                                 placeholder="Limpié y analicé una base de 50 mil registros con Python.\n"
-                                             "Presenté los resultados al equipo.")
+                                 placeholder=pista("exp_logros"))
                     st.button("Quitar esta experiencia", key=f"quitar_exp{i}", type="tertiary",
                               icon=":material/delete:", on_click=quitar, args=("exp", i))
             if n < MAX_EXP:
@@ -456,9 +439,9 @@ if ss.editando or "q0" not in ss:
                 with st.container(key=f"edu_{i}"):
                     c1, c2 = st.columns([3, 2])
                     c1.text_input("Carrera, bachillerato o certificado", key=f"w_edu{i}_titulo",
-                                  placeholder="Licenciatura en Ciencia de Datos")
+                                  placeholder=pista("edu_titulo"))
                     c2.text_input("Periodo", key=f"w_edu{i}_periodo", placeholder="2022 – 2026")
-                    st.text_input("Escuela", key=f"w_edu{i}_inst", placeholder="UNAM")
+                    st.text_input("Escuela", key=f"w_edu{i}_inst", placeholder=pista("edu_inst"))
                     st.text_input("Detalle (opcional)", key=f"w_edu{i}_detalle",
                                   placeholder="Promedio, materias relevantes, tesis, reconocimientos…")
                     if n > 1:
@@ -470,7 +453,7 @@ if ss.editando or "q0" not in ss:
             c1, c2 = st.columns(2)
             c1.text_area("Idiomas (uno por línea)", key="w_idiomas", height=90, placeholder="Inglés: intermedio (B2)")
             c2.text_area("Cursos y certificaciones (uno por línea)", key="w_cursos", height=90,
-                         placeholder="Curso de SQL (en línea, 2024)")
+                         placeholder=pista("cursos"))
             st.text_area("Otros: voluntariado, premios, actividades (uno por línea)", key="w_otros", height=70)
         if ss.get("error_paso"):
             st.error(ss.error_paso, icon=":material/error:")

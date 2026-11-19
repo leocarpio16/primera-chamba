@@ -122,6 +122,30 @@ la caché de la demo (JSearch) y probar Gemini.
 - [ ] **Viernes por la mañana, con OK:** 1 llamada de JSearch (caché de la demo, vence el 19/11 a las 00:30) y 1 prueba
   de Gemini que mida los tokens por CV (confirmar el «≈1 centavo» de la diapositiva 14).
 
+## Encuesta para todas las áreas (2026-11-18, después del bloque 8)
+- [x] Respaldo antes de cambiar: etiqueta `v1-antes-encuesta` (volver con `git checkout v1-antes-encuesta`).
+- [x] Hallazgo con perfiles de Psicología (motor real, 0 llamadas): «Psicóloga clínica» da 9 de 10 vacantes del área;
+  «Psicólogo organizacional» y «Psicóloga educativa» con nivel «recién egresado» se llenan de anuncios genéricos
+  «Entry level» (la frase del nivel pesa más que el puesto cuando hay pocas vacantes del área). Sin nivel salen bien
+  (HR Analyst, School Psychologist…). **Decisión del usuario: no cambiar el motor** (quitar el nivel de la consulta
+  se aparta de lo evaluado). Queda como límite. Catálogo: 131 títulos con «psycholog», 1,531 con «therap».
+- [x] Paso 1 con **«Tu área»** (8 opciones). Solo cambia los ejemplos de los campos y el perfil de ejemplo; **no entra
+  al ranking**. Textos en `primera_chamba/encuesta.py`. Sin área, ejemplos mezclados (ya no SQL/Python/GitHub/IIMAS).
+- [x] 7 perfiles de ejemplo, uno por área, probados con el motor (catálogo, nivel recién egresado): Psicóloga clínica,
+  Enfermera general, Auxiliar contable, Asistente jurídico, Maestra de preescolar, Diseñador gráfico y Analista de
+  datos. Top 10 del área en todos (Psicología y Enfermería con 1 ajena). Descartados por malos resultados: «Maestra de
+  primaria» y «Docente de inglés» (anuncios «Entry level» arriba), «Community manager» (3 ajenas).
+  CV y PDF de los 7 sin errores (2.3–3.9 s); en todos, el empleo ajeno a la carrera queda al final.
+- [x] El ejemplo de la demo (Analista de datos) es idéntico al anterior (comparado campo por campo); sin área elegida,
+  «Usar un perfil de ejemplo» y `?demo=1` siguen cargando ese. Vacante #1 sigue siendo «Analyst».
+- [x] Tipo de experiencia nuevo: «Trabajo independiente». Enlace: «LinkedIn, portafolio o sitio web». Ayuda en
+  «Habilidades» (conocimientos de la carrera, herramientas y trato con personas).
+- [x] AppTest: elegir área → cambian los ejemplos → perfil de ejemplo del área → pasos 2–5 → buscar (11.6 s) → resultados
+  «Graphic Designer»; `?demo=1` carga Analista de datos. Sin excepciones.
+- Límite: el aviso de habilidades faltantes (113 habilidades) casi no cubre áreas no STEM; si el anuncio no menciona
+  ninguna conocida, la app lo dice. Los ejemplos de otras áreas no tienen caché en vivo: buscarlos con red gasta 1
+  llamada de JSearch cada uno.
+
 ## Decisiones
 - 2026-11-18 · Nombre visible: **Chambot** (decisión del usuario; búsqueda web sin productos con ese nombre; registro
   ante el IMPI por verificar). El paquete `primera_chamba/` y el repo conservan el nombre anterior a propósito.

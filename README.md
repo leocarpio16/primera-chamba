@@ -12,8 +12,10 @@ hallazgos en [`docs/ESTADO.md`](docs/ESTADO.md).
 
 ## Qué hace
 
-1. **Encuesta de 5 pasos.** Solo el paso 1 (puesto) es obligatorio. Los pasos 1–2 alimentan el ranking; los pasos 3–5
-   solo sirven para el CV.
+1. **Encuesta de 5 pasos, para cualquier carrera.** Solo el paso 1 (puesto y habilidades) es obligatorio. Al elegir
+   tu área, los ejemplos de cada campo se adaptan y hay un perfil de ejemplo por área (salud, derecho, educación,
+   diseño, contaduría, psicología y tecnología). Los pasos 1–2 alimentan el ranking; los pasos 3–5 solo sirven para
+   el CV.
 2. **Ranking.** El perfil se traduce al inglés (MarianMT, local) y se compara con e5 (`multilingual-e5-small`) contra
    110,928 vacantes del catálogo de LinkedIn. Las preferencias cumplidas suben el puntaje.
 3. **Aprende de ti.** «Me interesa» y «No me interesa» reordenan la lista (Rocchio).
@@ -110,6 +112,7 @@ primera_chamba/
   en_vivo.py               JSearch / Adzuna con caché y respaldo
   habilidades.py           vocabulario fijo de 113 habilidades (aviso de faltantes)
   cv.py                    CV por reglas, Gemini opcional y PDF (fpdf2 + DejaVu Sans)
+  encuesta.py              ejemplos de la encuesta y perfiles de ejemplo por área
 notebooks/evaluacion.ipynb evaluación ejecutada
 docs/                      PRD, estado, guion de la demo
 ```

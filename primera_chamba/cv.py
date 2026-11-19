@@ -24,7 +24,7 @@ from primera_chamba import habilidades as hab
 MAX_LOGROS = 4        # logros por experiencia
 MAX_HABILIDADES = 12
 MAX_CURSOS = 5
-TIPOS_EXPERIENCIA = ["Empleo", "Prácticas", "Servicio social", "Proyecto", "Voluntariado"]
+TIPOS_EXPERIENCIA = ["Empleo", "Prácticas", "Servicio social", "Trabajo independiente", "Proyecto", "Voluntariado"]
 SECCIONES = {"perfil": "Perfil", "experiencia": "Experiencia", "educacion": "Educación", "habilidades": "Habilidades",
              "idiomas": "Idiomas", "cursos": "Cursos y certificaciones", "otros": "Otros"}
 FUENTES = Path(__file__).resolve().parent / "fuentes"
