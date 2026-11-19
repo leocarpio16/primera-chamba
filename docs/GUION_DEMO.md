@@ -1,4 +1,4 @@
-# Guion de demo · Primera chamba
+# Guion de demo · Chambot
 
 Duración objetivo de la demo: **5–6 min** (dentro de la presentación, diapositiva 12 «Demo»).
 Presentación: https://claude.ai/artifact/CXHAyrNFEFwyG22H2hS4oz (privada: compartirla desde *Share* si alguien más debe abrirla).

@@ -1,4 +1,4 @@
-# PRD · Primera chamba
+# PRD · Chambot
 
 **Versión:** 1.0 (borrador para aprobación) · **Fecha:** 2026-11-17 · **Autor:** Leo Carpio
 **Materia:** Datos Masivos II — proyecto semestral (requisitos libres; el peso está en el sistema de recomendación)
@@ -9,7 +9,7 @@
 ## 1. Problema y propuesta
 
 Quien busca empleo manda el mismo CV genérico a decenas de vacantes y revisa cientos de ofertas que no le
-corresponden. **Primera chamba** recibe el perfil profesional del usuario, le recomienda las vacantes que mejor
+corresponden. **Chambot** recibe el perfil profesional del usuario, le recomienda las vacantes que mejor
 coinciden con sus habilidades, ubicación y preferencias, y para cada vacante genera un CV adaptado que **solo usa lo
 que el usuario sí tiene**.
 

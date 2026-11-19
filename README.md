@@ -1,4 +1,4 @@
-# Primera chamba
+# Chambot
 
 Recomendador de vacantes para quien busca su primer empleo. A partir de tu perfil, te sugiere las ofertas que mejor
 te quedan y te arma un CV adaptado a cada una, usando solo lo que tú escribiste.

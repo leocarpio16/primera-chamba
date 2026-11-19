@@ -1,1 +1,1 @@
-"""Primera chamba: recomendador de vacantes con CV personalizado."""
+"""Chambot: recomendador de vacantes con CV personalizado."""

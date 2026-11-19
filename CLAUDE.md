@@ -1,4 +1,4 @@
-# Primera chamba
+# Chambot
 
 Proyecto semestral de Datos Masivos II (individual). Recomendador de vacantes + CV personalizado, en Streamlit.
 **Entrega: viernes 2026-11-20, 19:00** (presentación + demo en vivo).

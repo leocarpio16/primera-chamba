@@ -1,4 +1,4 @@
-"""Primera chamba · app Streamlit. Ejecutar con `streamlit run app.py`.
+"""Chambot · app Streamlit. Ejecutar con `streamlit run app.py`.
 
 Diseño: página clara con la tarjeta del formulario en negro (formulario por pasos con barra de avance), títulos en
 monoespaciada y resultados en tarjetas blancas. El tema base está en `.streamlit/config.toml`; los detalles, en ESTILOS.
@@ -14,7 +14,7 @@ from primera_chamba import habilidades as hab
 from primera_chamba.motor import (BONO, CANDIDATOS, LUGAR_MAX_VIVAS, MODALIDADES, NIVEL_ES, NIVELES, TIPO_ES, TIPOS,
                                   Motor, Perfil, coincidencia, consulta_en, descripciones)
 
-st.set_page_config(page_title="Primera chamba", page_icon=":material/work:", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Chambot", page_icon=":material/work:", layout="centered", initial_sidebar_state="collapsed")
 ss = st.session_state
 SIN_NIVEL = "(sin preferencia)"
 
@@ -389,7 +389,7 @@ with st.sidebar:
 
 # ---------------- encabezado ----------------
 st.html(ESTILOS)
-st.html('<p class="pc-marca">Primera chamba</p>'
+st.html('<p class="pc-marca">Chambot</p>'
         '<p class="pc-sub">Dinos qué buscas y te recomendamos las vacantes que mejor encajan contigo. '
         'Marca las que te interesan y la lista se ajusta a ti.</p>')
 

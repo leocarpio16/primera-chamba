@@ -1,4 +1,4 @@
-# Estado · Primera chamba
+# Estado · Chambot
 
 **Bloque actual:** 8 cerrado (demo local). Pendiente: ensayo del usuario y, el viernes por la mañana con su OK, renovar
 la caché de la demo (JSearch) y probar Gemini.
@@ -123,6 +123,8 @@ la caché de la demo (JSearch) y probar Gemini.
   de Gemini que mida los tokens por CV (confirmar el «≈1 centavo» de la diapositiva 14).
 
 ## Decisiones
+- 2026-11-18 · Nombre visible: **Chambot** (decisión del usuario; búsqueda web sin productos con ese nombre; registro
+  ante el IMPI por verificar). El paquete `primera_chamba/` y el repo conservan el nombre anterior a propósito.
 - Claves en `.env` vía python-dotenv; en la nube, la variable de entorno tiene prioridad.
 - API en vivo: **JSearch como principal** (descripción completa; trae vacantes de LinkedIn, Indeed, Computrabajo… vía
   Google for Jobs, sin scraping) y **Adzuna como respaldo** (descripción recortada, pero a veces trae sueldo).
